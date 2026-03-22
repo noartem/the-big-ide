@@ -1,0 +1,18 @@
+set number
+set relativenumber
+
+set tabstop=2
+set shiftwidth=2
+set expandtab
+set smartindent
+
+set hidden
+set nowrap
+
+set ignorecase
+set smartcase
+set incsearch
+set hlsearch
+
+set mouse=a
+syntax on

@@ -1,0 +1,38 @@
+services:
+  sandbox:
+    build:
+      context: ..
+      dockerfile: .sandbox/Dockerfile
+      args:
+        APP_UID: ${APP_UID:-1000}
+        APP_GID: ${APP_GID:-1000}
+        APP_USER: ${APP_USER:-bigide}
+        BASE_IMAGE: ${SANDBOX_IMAGE:-node:20-bookworm}
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    working_dir: /workspace
+    command: ["sh", "-lc", "${SANDBOX_COMMAND:-tail -f /dev/null}"]
+    environment:
+      TERM: xterm-256color
+      HOME: /home/${APP_USER:-bigide}
+      XDG_CONFIG_HOME: /home/${APP_USER:-bigide}/.config
+      XDG_CACHE_HOME: /home/${APP_USER:-bigide}/.cache
+      XDG_STATE_HOME: /home/${APP_USER:-bigide}/.local/state
+      OPENCODE_PORT: ${OPENCODE_PORT:-4090}
+    volumes:
+      - ..:/workspace
+      - sandbox-node-modules:/workspace/node_modules
+      - sandbox-opencode-config:/home/${APP_USER:-bigide}/.config/opencode
+      - sandbox-opencode-cache:/home/${APP_USER:-bigide}/.cache/opencode
+      - sandbox-opencode-state:/home/${APP_USER:-bigide}/.local/state/opencode
+      - ./zshrc:/home/${APP_USER:-bigide}/.zshrc:ro
+      - ./vimrc:/home/${APP_USER:-bigide}/.vimrc:ro
+    ports:
+      - "${OPENCODE_PORT:-4090}:${OPENCODE_PORT:-4090}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  sandbox-node-modules:
+  sandbox-opencode-config:
+  sandbox-opencode-cache:
+  sandbox-opencode-state:

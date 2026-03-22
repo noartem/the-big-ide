@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 39 58% 95%;
+  --foreground: 210 30% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 30% 13%;
+  --primary: 193 63% 34%;
+  --primary-foreground: 190 100% 98%;
+  --secondary: 35 50% 85%;
+  --secondary-foreground: 210 30% 13%;
+  --muted: 42 35% 90%;
+  --muted-foreground: 213 14% 36%;
+  --accent: 23 71% 56%;
+  --accent-foreground: 27 100% 97%;
+  --destructive: 0 75% 48%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 38 32% 79%;
+  --input: 36 30% 83%;
+  --ring: 193 63% 34%;
+  --radius: 0rem;
+}
+
+* {
+  @apply border-border;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-background text-foreground;
+  margin: 0;
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.glass-grid {
+  background-image:
+    linear-gradient(to right, hsla(200, 30%, 50%, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, hsla(200, 30%, 50%, 0.05) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.panel-handle {
+  @apply bg-border/70 transition-colors;
+}
+
+.panel-handle:hover {
+  @apply bg-primary/50;
+}
+
+.cm-editor,
+.cm-scroller {
+  height: 100%;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+}
+
+.cm-editor {
+  border-radius: 0;
+}
+
+.xterm .xterm-viewport {
+  border-radius: 0;
+}
