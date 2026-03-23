@@ -50,6 +50,7 @@ This creates desktop artifacts in `release/` for the current OS via `electron-bu
 - Pushing `main` automatically checks the version in `package.json`, creates a tag if needed, and completes the desktop/npm release in the same workflow run.
 - Tag pushes like `v0.1.0` can also run the same release pipeline directly.
 - Manual `workflow_dispatch` runs the same version-based release flow without requiring a separate tag push.
+- The latest GitHub Release gets a managed notes block with install/download details, and older releases are marked as archived prereleases.
 - Set `NPM_TOKEN` in repository secrets before using tag-based releases.
 - Desktop artifacts are currently published without code signing or notarization.
 

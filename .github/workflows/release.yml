@@ -119,6 +119,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          name: The Big IDE ${{ needs.prepare-release.outputs.release_tag }}
           tag_name: ${{ needs.prepare-release.outputs.release_tag }}
           target_commitish: ${{ github.sha }}
           files: |
@@ -128,6 +129,109 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/**/*.exe
           generate_release_notes: true
+
+  refresh-release-metadata:
+    name: Refresh release metadata
+    runs-on: ubuntu-latest
+    needs: [prepare-release, publish-release]
+    if: ${{ !cancelled() && needs.prepare-release.result == 'success' && (needs.publish-release.result == 'success' || needs.publish-release.result == 'skipped') }}
+
+    steps:
+      - name: Update release notes and archive old releases
+        uses: actions/github-script@v7
+        env:
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+          SHOULD_RELEASE: ${{ needs.prepare-release.outputs.should_release }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const managedNotesPattern = /<!-- big-ide-release-notes:start -->[\s\S]*?<!-- big-ide-release-notes:end -->\n*/g;
+            const archivedBannerPattern = /<!-- big-ide-archived-release:start -->[\s\S]*?<!-- big-ide-archived-release:end -->\n*/g;
+
+            const normalizeBody = (body) => (body || '').trim();
+            const releaseNotesBlock = (version) => `<!-- big-ide-release-notes:start -->\n## Release Notes\n\n- npm package: \`the-big-ide@${version}\`\n- Desktop downloads: Linux \`.AppImage\`/\`.tar.gz\`, macOS arm64 \`.dmg\`/\`.zip\`, Windows \`.exe\`/\`.zip\`\n- Signing: unsigned desktop artifacts\n<!-- big-ide-release-notes:end -->`;
+            const archivedBanner = [
+              '<!-- big-ide-archived-release:start -->',
+              '> Archived release: superseded by a newer published version. Use the latest release unless you need this exact build.',
+              '<!-- big-ide-archived-release:end -->',
+            ].join('\n');
+
+            const allReleases = await github.paginate(github.rest.repos.listReleases, {
+              owner,
+              repo,
+              per_page: 100,
+            });
+
+            if (!allReleases.length) {
+              core.info('No releases found; nothing to refresh.');
+              return;
+            }
+
+            const shouldRelease = process.env.SHOULD_RELEASE === 'true';
+            const requestedTag = process.env.RELEASE_TAG;
+            let currentRelease = null;
+
+            if (requestedTag) {
+              currentRelease = allReleases.find((release) => release.tag_name === requestedTag) || null;
+            }
+
+            if (!currentRelease) {
+              currentRelease = allReleases.find((release) => !release.draft && !release.prerelease) || allReleases.find((release) => !release.draft) || null;
+            }
+
+            if (!currentRelease) {
+              core.setFailed('Could not determine current release to refresh.');
+              return;
+            }
+
+            const currentVersion = currentRelease.tag_name.replace(/^v/, '');
+            const currentBody = normalizeBody(currentRelease.body)
+              .replace(managedNotesPattern, '')
+              .replace(archivedBannerPattern, '')
+              .trim();
+
+            await github.rest.repos.updateRelease({
+              owner,
+              repo,
+              release_id: currentRelease.id,
+              tag_name: currentRelease.tag_name,
+              name: `The Big IDE ${currentRelease.tag_name}`,
+              body: [releaseNotesBlock(currentVersion), currentBody].filter(Boolean).join('\n\n'),
+              draft: currentRelease.draft,
+              prerelease: false,
+              make_latest: 'true',
+            });
+
+            core.info(`Updated current release metadata for ${currentRelease.tag_name}.`);
+
+            const staleReleases = allReleases.filter((release) => !release.draft && release.id !== currentRelease.id);
+
+            for (const release of staleReleases) {
+              const staleBody = normalizeBody(release.body)
+                .replace(archivedBannerPattern, '')
+                .trim();
+
+              await github.rest.repos.updateRelease({
+                owner,
+                repo,
+                release_id: release.id,
+                tag_name: release.tag_name,
+                name: release.name && release.name.startsWith('[Archived] ')
+                  ? release.name
+                  : `[Archived] ${release.name || release.tag_name}`,
+                body: [archivedBanner, staleBody].filter(Boolean).join('\n\n'),
+                draft: release.draft,
+                prerelease: true,
+                make_latest: 'false',
+              });
+
+              core.info(`Archived release ${release.tag_name}.`);
+            }
+
+            if (!shouldRelease) {
+              core.info('No new release was published in this run; refreshed existing release metadata only.');
+            }
 
   publish-npm:
     name: Publish npm
