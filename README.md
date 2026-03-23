@@ -43,6 +43,20 @@ Web mode runs with a local backend service that executes the same OS-level opera
 npm run build
 ```
 
+## Desktop release build
+
+```bash
+npm run build:app
+```
+
+This creates desktop artifacts in `release/` for the current OS via `electron-builder`.
+
+## Release automation
+
+- GitHub Actions builds desktop packages on Linux, Windows, and macOS.
+- Pushing a tag like `v0.1.0` also publishes `the-big-ide` to npm.
+- Set `NPM_TOKEN` in GitHub repository secrets before using tag-based releases.
+
 ## Notes
 
 - Electron mode uses real local workspaces in `~/.big-ide/sessions`, creates `.sandbox` templates for each session, and starts/stops sandbox containers via Docker Compose.
