@@ -54,6 +54,7 @@ This creates desktop artifacts in `release/` for the current OS via `electron-bu
 ## Release automation
 
 - GitHub Actions builds desktop packages on Linux, Windows, and macOS.
+- Tagged releases create a GitHub Release and attach the packaged desktop artifacts.
 - Pushing a tag like `v0.1.0` also publishes `the-big-ide` to npm.
 - Set `NPM_TOKEN` in GitHub repository secrets before using tag-based releases.
 
