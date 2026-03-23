@@ -12,10 +12,13 @@ permissions:
   workflow_dispatch:
 
 jobs:
-  create-tag:
-    name: Create release tag
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+  prepare-release:
+    name: Prepare release
     runs-on: ubuntu-latest
+    outputs:
+      release_tag: ${{ steps.prepare.outputs.release_tag }}
+      release_version: ${{ steps.prepare.outputs.release_version }}
+      should_release: ${{ steps.prepare.outputs.should_release }}
 
     steps:
       - name: Checkout
@@ -28,22 +31,36 @@ jobs:
         with:
           node-version: 20
 
-      - name: Create and push version tag
+      - name: Prepare release metadata
+        id: prepare
+        shell: bash
         run: |
-          VERSION=$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")
-          TAG="v$VERSION"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            SHOULD_RELEASE=true
+          else
+            VERSION=$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")
+            TAG="v$VERSION"
 
-          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
-            echo "Tag $TAG already exists on origin; skipping"
-            exit 0
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+              echo "Tag $TAG already exists on origin; skipping release"
+              SHOULD_RELEASE=false
+            else
+              git tag "$TAG"
+              git push origin "$TAG"
+              SHOULD_RELEASE=true
+            fi
           fi
 
-          git tag "$TAG"
-          git push origin "$TAG"
+          echo "release_tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "release_version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.os }}
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: prepare-release
+    if: needs.prepare-release.outputs.should_release == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -53,6 +70,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.release_tag }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -88,8 +107,8 @@ jobs:
   publish-release:
     name: Publish GitHub release
     runs-on: ubuntu-latest
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [prepare-release, build]
+    if: needs.prepare-release.outputs.should_release == 'true'
 
     steps:
       - name: Download build artifacts
@@ -100,6 +119,8 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare-release.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           files: |
             artifacts/**/*.dmg
             artifacts/**/*.zip
@@ -111,12 +132,14 @@ jobs:
   publish-npm:
     name: Publish npm
     runs-on: ubuntu-latest
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [prepare-release, build]
+    if: needs.prepare-release.outputs.should_release == 'true'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare-release.outputs.release_tag }}
 
       - name: Setup Node
         uses: actions/setup-node@v4

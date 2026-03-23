@@ -47,9 +47,9 @@ This creates desktop artifacts in `release/` for the current OS via `electron-bu
 ## Release automation
 
 - GitHub Actions builds desktop packages on Linux, Windows, and macOS.
-- Pushing `main` automatically creates and pushes a git tag from the version in `package.json` if that version has not been released yet.
-- Tag pushes like `v0.1.0` create a GitHub Release and publish `the-big-ide` to npm.
-- Manual `workflow_dispatch` can also create the tag from `package.json` and trigger the same release pipeline.
+- Pushing `main` automatically checks the version in `package.json`, creates a tag if needed, and completes the desktop/npm release in the same workflow run.
+- Tag pushes like `v0.1.0` can also run the same release pipeline directly.
+- Manual `workflow_dispatch` runs the same version-based release flow without requiring a separate tag push.
 - Set `NPM_TOKEN` in repository secrets before using tag-based releases.
 - Desktop artifacts are currently published without code signing or notarization.
 
