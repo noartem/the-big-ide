@@ -20,7 +20,7 @@
   --border: 38 32% 79%;
   --input: 36 30% 83%;
   --ring: 193 63% 34%;
-  --radius: 0rem;
+  --radius: 1rem;
 }
 
 * {
@@ -36,7 +36,11 @@ body,
 body {
   @apply bg-background text-foreground;
   margin: 0;
-  font-family: "IBM Plex Mono", monospace;
+  font-family: "Space Grotesk", sans-serif;
+  background-image:
+    radial-gradient(circle at top left, hsla(193, 63%, 34%, 0.12), transparent 35%),
+    radial-gradient(circle at top right, hsla(23, 71%, 56%, 0.12), transparent 28%),
+    linear-gradient(180deg, hsla(42, 35%, 97%, 0.98), hsla(39, 58%, 95%, 1));
 }
 
 .glass-grid {
@@ -58,13 +62,13 @@ body {
 .cm-scroller {
   height: 100%;
   font-family: "IBM Plex Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .cm-editor {
-  border-radius: 0;
+  border-radius: 0.75rem;
 }
 
 .xterm .xterm-viewport {
-  border-radius: 0;
+  border-radius: 0.75rem;
 }

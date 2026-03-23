@@ -1,46 +1,100 @@
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { Play, RefreshCcw, Save, Square } from "lucide-react";
+import {
+  Activity,
+  Bot,
+  FolderPlus,
+  FolderTree,
+  GitBranch,
+  GitCommitHorizontal,
+  Globe,
+  Play,
+  RefreshCcw,
+  Save,
+  Square,
+  TerminalSquare
+} from "lucide-react";
 
 import { EditorPanel } from "@/components/editor-panel";
 import { FileTree } from "@/components/file-tree";
 import { TerminalPanel } from "@/components/terminal-panel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import type { BootstrapPayload, FileNode, GitStatusEntry, GitStatusSnapshot, Project, Session } from "@/types/big-ide";
 
 type SessionFilter = "all" | "active";
+type BadgeVariant = "default" | "secondary" | "outline" | "success" | "warning" | "danger";
 
 const PROJECTS_CHANGED_EVENT = "bigide:projects-changed";
 
-type CompactPanelProps = {
+type WorkspaceCardProps = {
   title: string;
+  description?: string;
   children: ReactNode;
   className?: string;
   actions?: ReactNode;
+  contentClassName?: string;
 };
 
-function CompactPanel({ title, children, className, actions }: CompactPanelProps) {
+function WorkspaceCard({ title, description, children, className, actions, contentClassName }: WorkspaceCardProps) {
   return (
-    <section className={cn("flex min-h-0 flex-col", className)}>
-      <header className="flex items-center justify-between border-b border-border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
-        <span>{title}</span>
-        {actions ? <span className="flex items-center gap-1">{actions}</span> : null}
-      </header>
-      <div className="min-h-0 flex-1">{children}</div>
-    </section>
+    <Card className={cn("flex min-h-0 flex-col overflow-hidden border-border/70 bg-card/90 shadow-lg", className)}>
+      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-border/60 pb-4">
+        <div className="space-y-1">
+          <CardTitle>{title}</CardTitle>
+          {description ? <CardDescription>{description}</CardDescription> : null}
+        </div>
+        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      </CardHeader>
+      <CardContent className={cn("min-h-0 flex-1", contentClassName)}>{children}</CardContent>
+    </Card>
   );
 }
 
-function sessionTone(session: Session) {
+function sessionStatusVariant(session: Session): BadgeVariant {
   if (session.status === "running") {
-    return "text-emerald-700";
+    return "success";
   }
   if (session.agentStatus === "failed") {
-    return "text-red-700";
+    return "danger";
   }
   if (session.agentStatus === "missing-opencode") {
-    return "text-amber-700";
+    return "warning";
   }
-  return "text-muted-foreground";
+  return "secondary";
+}
+
+function agentStatusVariant(status: Session["agentStatus"]): BadgeVariant {
+  if (status === "running") {
+    return "success";
+  }
+  if (status === "failed") {
+    return "danger";
+  }
+  if (status === "missing-opencode") {
+    return "warning";
+  }
+  return "outline";
+}
+
+function gitEntryClass(entry: GitStatusEntry) {
+  if (entry.untracked) {
+    return "text-amber-900";
+  }
+  if (entry.staged) {
+    return "text-emerald-900";
+  }
+  return "text-foreground";
+}
+
+function formatAgentStatus(status: Session["agentStatus"]) {
+  return status.replace(/-/g, " ");
 }
 
 function normalizeWebUrl(value: string) {
@@ -85,6 +139,8 @@ export default function App() {
   const [gitStatus, setGitStatus] = useState<GitStatusSnapshot | null>(null);
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
   const [gitBusyAction, setGitBusyAction] = useState<"stage" | "discard" | "commit" | null>(null);
+  const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
 
   const [webDraftUrl, setWebDraftUrl] = useState("http://localhost:3000");
   const [webUrl, setWebUrl] = useState("http://localhost:3000");
@@ -214,9 +270,11 @@ export default function App() {
       try {
         setBusyAction(true);
         const created = await window.bigIDE.projects.create({ name });
+        await refreshProjects();
         setNewProjectName("");
         setActiveProjectId(created.id);
         setInfoMessage(`Project created: ${created.name}`);
+        setErrorMessage("");
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Failed to create project");
       } finally {
@@ -237,9 +295,11 @@ export default function App() {
           projectId: activeProjectId,
           name: newSessionName.trim() || undefined
         });
+        await refreshProjects();
         setNewSessionName("");
         setActiveSessionId(created.id);
         setInfoMessage(`Session created: ${created.name}`);
+        setErrorMessage("");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to create session");
     } finally {
@@ -258,6 +318,7 @@ export default function App() {
           projectId: activeProjectId,
           sessionId: activeSessionId
         });
+        await refreshProjects();
         setInfoMessage("Session started");
         setErrorMessage("");
     } catch (error) {
@@ -278,6 +339,7 @@ export default function App() {
           projectId: activeProjectId,
           sessionId: activeSessionId
         });
+        await refreshProjects();
         setInfoMessage("Session stopped");
         setErrorMessage("");
     } catch (error) {
@@ -386,7 +448,7 @@ export default function App() {
       return;
     }
 
-    const message = window.prompt("Commit message", `chore: update ${activeSession.name}`)?.trim();
+    const message = commitMessage.trim();
     if (!message) {
       return;
     }
@@ -401,12 +463,22 @@ export default function App() {
       const outputLine = result.output.split(/\r?\n/).find(Boolean);
       setInfoMessage(outputLine || "Commit created");
       setErrorMessage("");
+      setIsCommitDialogOpen(false);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to create commit");
     } finally {
       setGitBusyAction(null);
     }
-  }, [activeSession, applyGitSnapshot]);
+  }, [activeSession, applyGitSnapshot, commitMessage]);
+
+  const openCommitDialog = useCallback(() => {
+    if (!activeSession) {
+      return;
+    }
+
+    setCommitMessage((currentMessage) => currentMessage || `chore: update ${activeSession.name}`);
+    setIsCommitDialogOpen(true);
+  }, [activeSession]);
 
   const openWebView = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
@@ -557,402 +629,537 @@ export default function App() {
 
   if (!window.bigIDE) {
     return (
-      <main className="flex h-full items-center justify-center bg-background font-mono text-[11px]">
-        <div className="border border-border px-3 py-2">Backend unavailable. Use npm run dev or npm run dev:web.</div>
+      <main className="flex h-full items-center justify-center bg-background p-6 font-sans">
+        <Card className="max-w-lg border-border/70 bg-background/90 shadow-xl">
+          <CardHeader>
+            <CardTitle>Backend unavailable</CardTitle>
+            <CardDescription>Use `npm run dev` or `npm run dev:web` to connect the workspace runtime.</CardDescription>
+          </CardHeader>
+        </Card>
       </main>
     );
   }
 
   return (
-    <main className="h-full w-full overflow-hidden bg-background font-mono text-[11px] leading-tight text-foreground">
-      <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[230px_minmax(0,1fr)]">
-        <aside className="grid min-h-[180px] max-h-[38vh] grid-rows-[auto_auto_auto_1fr_auto] border-b border-border lg:min-h-0 lg:max-h-none lg:border-b-0 lg:border-r">
-          <div className="border-b border-border px-2 py-1 font-semibold uppercase tracking-[0.08em]">Projects</div>
-
-          <form className="grid grid-cols-[1fr_auto] border-b border-border" onSubmit={createProject}>
-            <input
-              data-testid="project-name-input"
-              value={newProjectName}
-              onChange={(event) => setNewProjectName(event.target.value)}
-              placeholder="new project"
-              className="h-7 w-full border-0 bg-transparent px-2 text-[11px] outline-none placeholder:text-muted-foreground"
-            />
-            <button
-              data-testid="create-project-button"
-              type="submit"
-              disabled={busyAction || !newProjectName.trim()}
-              className="h-7 border-l border-border px-2 text-[10px] uppercase tracking-[0.08em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              +project
-            </button>
-          </form>
-
-          <div className="grid grid-cols-[1fr_auto] border-b border-border">
-            <input
-              data-testid="session-name-input"
-              value={newSessionName}
-              onChange={(event) => setNewSessionName(event.target.value)}
-              placeholder="backend-debug"
-              className="h-7 w-full border-0 bg-transparent px-2 text-[11px] outline-none placeholder:text-muted-foreground"
-            />
-            <button
-              data-testid="create-session-button"
-              type="button"
-              onClick={() => void createSession()}
-              disabled={busyAction || !activeProjectId}
-              className="h-7 border-l border-border px-2 text-[10px] uppercase tracking-[0.08em] hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              +session
-            </button>
-          </div>
-
-          <div className="min-h-0 overflow-auto">
-            {!sidebarProjects.length ? (
-              <div className="px-2 py-2 text-[10px] text-muted-foreground">No projects yet.</div>
-            ) : null}
-
-            {sidebarProjects.map((project) => {
-              const isActiveProject = project.id === activeProjectId;
-              return (
-                <section key={project.id} className="border-b border-border">
-                  <button
-                    type="button"
-                    className={cn("w-full truncate px-2 py-1 text-left uppercase", isActiveProject && "bg-muted")}
-                    onClick={() => setActiveProjectId(project.id)}
-                    title={project.rootPath}
-                  >
-                    {project.name}
-                  </button>
-
-                  {project.sessions.length ? (
-                    project.sessions.map((session) => {
-                      const isActiveSession = session.id === activeSessionId;
-                      return (
-                        <button
-                          data-testid="session-row"
-                          data-session-name={session.name}
-                          data-session-status={session.status}
-                          type="button"
-                          key={session.id}
-                          className={cn(
-                            "flex w-full items-center gap-2 border-t border-border px-2 py-1 text-left",
-                            isActiveSession && "bg-muted"
-                          )}
-                          onClick={() => {
-                            setActiveProjectId(project.id);
-                            setActiveSessionId(session.id);
-                          }}
-                        >
-                          <span className={cn("size-1.5 shrink-0 rounded-full", session.status === "running" ? "bg-emerald-600" : "bg-muted-foreground")} />
-                          <span className="truncate">{session.name}</span>
-                          <span className={cn("ml-auto shrink-0 text-[10px] uppercase", sessionTone(session))}>{session.status}</span>
-                        </button>
-                      );
-                    })
-                  ) : (
-                    <div className="border-t border-border px-4 py-1 text-[10px] text-muted-foreground">no sessions</div>
-                  )}
-                </section>
-              );
-            })}
-          </div>
-
-          <div className="flex items-center justify-between border-t border-border px-2 py-1 text-[10px] uppercase tracking-[0.08em]">
-            <span className="text-muted-foreground">Filter:</span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                className={cn("px-1", sessionFilter === "all" ? "font-semibold text-foreground" : "text-muted-foreground")}
-                onClick={() => setSessionFilter("all")}
-              >
-                all
-              </button>
-              <span className="text-muted-foreground">/</span>
-              <button
-                type="button"
-                className={cn("px-1", sessionFilter === "active" ? "font-semibold text-foreground" : "text-muted-foreground")}
-                onClick={() => setSessionFilter("active")}
-              >
-                active
-              </button>
+    <main className="h-full overflow-hidden text-foreground">
+      <div className="glass-grid flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
+        <Card className="border-border/70 bg-background/85 shadow-xl backdrop-blur-md">
+          <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">The Big IDE</p>
+              <h1 className="text-3xl font-semibold tracking-tight">Shadcn workspace cockpit</h1>
+              <p className="max-w-3xl text-sm text-muted-foreground">
+                Manage projects, sessions, code, git state, and browser previews from one responsive control surface.
+              </p>
             </div>
-          </div>
-        </aside>
 
-        <section className="grid min-h-0 grid-rows-[auto_1fr_auto]">
-          <div className="flex items-center justify-between gap-2 border-b border-border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]">
-            <span data-testid="active-session-label" className="truncate">Session: {activeSession?.name ?? "none"}</span>
-            <span className="shrink-0 text-[10px] font-normal text-muted-foreground">
-              {boot?.runtimeTarget ?? "unknown"} / {boot?.docker.available ? "docker:ok" : "docker:off"}
-            </span>
-          </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">{boot?.runtimeTarget ?? "unknown"}</Badge>
+              <Badge variant={boot?.docker.available ? "success" : "warning"}>
+                {boot?.docker.available ? `docker ${boot?.docker.version || "ready"}` : "docker unavailable"}
+              </Badge>
+              <Badge variant={activeSession ? sessionStatusVariant(activeSession) : "secondary"}>
+                {activeSession ? activeSession.status : "no active session"}
+              </Badge>
+              {activeSession ? <Badge variant={agentStatusVariant(activeSession.agentStatus)}>agent {formatAgentStatus(activeSession.agentStatus)}</Badge> : null}
+            </div>
+          </CardContent>
+        </Card>
 
-          <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-            <div className="min-h-0 overflow-x-auto border-b border-border">
-              <div className="grid h-full min-w-[980px] grid-cols-4">
-                <CompactPanel
-                  title="FILE TREE"
-                  className="border-r border-border"
-                  actions={
-                    <button type="button" onClick={() => void reloadTree()} className="hover:text-foreground/80" aria-label="Refresh file tree">
-                      <RefreshCcw className="size-3" />
-                    </button>
-                  }
-                >
-                  <div className="flex h-full min-h-0 flex-col">
-                    <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">
-                      {activeSession?.workdir ?? "no session"}
-                    </div>
-                    <div className="min-h-0 flex-1">
-                      <FileTree
-                        nodes={treeNodes}
-                        selectedFilePath={selectedFilePath}
-                        onOpenFile={(path) => void openFile(path)}
-                        isLoading={treeLoading}
-                      />
-                    </div>
-                  </div>
-                </CompactPanel>
+        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <WorkspaceCard
+            title="Projects"
+            description="Create projects, spin up sessions, and filter the workspace list."
+            className="min-h-[36rem] xl:min-h-0"
+            contentClassName="flex min-h-0 flex-1 flex-col gap-4"
+          >
+            <form className="grid gap-3" onSubmit={createProject}>
+              <div className="grid gap-2">
+                <Input
+                  data-testid="project-name-input"
+                  value={newProjectName}
+                  onChange={(event) => setNewProjectName(event.target.value)}
+                  placeholder="New project"
+                />
+                <Button data-testid="create-project-button" type="submit" disabled={busyAction || !newProjectName.trim()}>
+                  <FolderPlus className="mr-2 size-4" />
+                  Create project
+                </Button>
+              </div>
+            </form>
 
-                <CompactPanel title="CHAT / AGENT" className="border-r border-border">
-                  <div className="flex h-full min-h-0 flex-col">
-                    <div className="min-h-0 flex-1 overflow-auto">
-                      {chatLines.length ? (
-                        chatLines.map((line, index) => (
-                          <div
-                            key={`${line}-${index}`}
+            <div className="grid gap-2">
+              <Input
+                data-testid="session-name-input"
+                value={newSessionName}
+                onChange={(event) => setNewSessionName(event.target.value)}
+                placeholder="backend-debug"
+              />
+              <Button
+                data-testid="create-session-button"
+                type="button"
+                variant="secondary"
+                onClick={() => void createSession()}
+                disabled={busyAction || !activeProjectId}
+              >
+                Create session
+              </Button>
+            </div>
+
+            <Tabs value={sessionFilter} onValueChange={(value) => setSessionFilter(value as SessionFilter)}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="all">All sessions</TabsTrigger>
+                <TabsTrigger value="active">Running only</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <ScrollArea className="min-h-0 flex-1 rounded-xl border border-border/60 bg-background/60">
+              <div className="space-y-3 p-3">
+                {!sidebarProjects.length ? <p className="text-sm text-muted-foreground">No projects yet.</p> : null}
+
+                {sidebarProjects.map((project) => {
+                  const isActiveProject = project.id === activeProjectId;
+
+                  return (
+                    <section key={project.id} className="rounded-xl border border-border/60 bg-card/60 shadow-sm">
+                      <div className="flex items-start justify-between gap-3 p-3">
+                        <div className="min-w-0 flex-1">
+                          <button
+                            type="button"
                             className={cn(
-                              "border-b border-border px-2 py-1 whitespace-pre-wrap break-words",
-                              line.startsWith("[status]") && "text-muted-foreground",
-                              line.includes("[stderr]") && "text-red-700"
+                              "block max-w-full truncate text-left text-sm font-semibold transition-colors hover:text-primary",
+                              isActiveProject && "text-primary"
                             )}
+                            onClick={() => setActiveProjectId(project.id)}
+                            title={project.rootPath}
                           >
-                            {line}
+                            {project.name}
+                          </button>
+                          <p className="mt-1 truncate text-xs text-muted-foreground">{project.rootPath}</p>
+                        </div>
+                        <Badge variant="outline">{project.sessions.length}</Badge>
+                      </div>
+
+                      <div className="space-y-1 border-t border-border/60 p-2">
+                        {project.sessions.length ? (
+                          project.sessions.map((session) => {
+                            const isActiveSession = session.id === activeSessionId;
+
+                            return (
+                              <button
+                                data-testid="session-row"
+                                data-session-name={session.name}
+                                data-session-status={session.status}
+                                type="button"
+                                key={session.id}
+                                className={cn(
+                                  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/70",
+                                  isActiveSession && "bg-primary/10 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.14)]"
+                                )}
+                                onClick={() => {
+                                  setActiveProjectId(project.id);
+                                  setActiveSessionId(session.id);
+                                }}
+                              >
+                                <span className={cn("size-2 shrink-0 rounded-full", session.status === "running" ? "bg-emerald-500" : "bg-muted-foreground")} />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-medium">{session.name}</span>
+                                  <span className="block truncate text-xs text-muted-foreground">{formatAgentStatus(session.agentStatus)}</span>
+                                </span>
+                                <Badge variant={sessionStatusVariant(session)}>{session.status}</Badge>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-lg px-3 py-2 text-sm text-muted-foreground">No sessions yet.</div>
+                        )}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </WorkspaceCard>
+
+          <section className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)_minmax(0,1fr)]">
+            <div className="grid min-h-0 gap-4 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+              <WorkspaceCard
+                title="File tree"
+                description={activeSession?.workdir ?? "Select a session to load a workspace tree."}
+                contentClassName="min-h-0 p-0"
+                actions={
+                  <Button type="button" variant="ghost" size="icon" onClick={() => void reloadTree()} aria-label="Refresh file tree">
+                    <RefreshCcw className="size-4" />
+                  </Button>
+                }
+              >
+                <div className="h-full min-h-[18rem] lg:min-h-0">
+                  <FileTree
+                    nodes={treeNodes}
+                    selectedFilePath={selectedFilePath}
+                    onOpenFile={(path) => void openFile(path)}
+                    isLoading={treeLoading}
+                  />
+                </div>
+              </WorkspaceCard>
+
+              <WorkspaceCard
+                title="Agent activity"
+                description="Stream logs and inspect runtime state for the active session."
+                contentClassName="flex min-h-0 flex-col"
+              >
+                <Tabs defaultValue="logs" className="flex min-h-0 flex-1 flex-col">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="logs">Logs</TabsTrigger>
+                    <TabsTrigger value="runtime">Runtime</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="logs" className="min-h-0 flex-1">
+                    <ScrollArea className="h-full rounded-xl border border-border/60 bg-background/60">
+                      <div className="space-y-2 p-3">
+                        {chatLines.length ? (
+                          chatLines.map((line, index) => (
+                            <div
+                              key={`${line}-${index}`}
+                              className={cn(
+                                "rounded-lg border border-border/60 bg-card/70 px-3 py-2 text-xs leading-relaxed text-foreground/90",
+                                line.startsWith("[status]") && "text-muted-foreground",
+                                line.includes("[stderr]") && "border-red-200 bg-red-50/70 text-red-900"
+                              )}
+                            >
+                              {line}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
+                            No agent logs yet.
                           </div>
-                        ))
-                      ) : (
-                        <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">no agent logs yet</div>
-                      )}
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+
+                  <TabsContent value="runtime" className="min-h-0 flex-1">
+                    <ScrollArea className="h-full rounded-xl border border-border/60 bg-background/60">
+                      <div className="space-y-4 p-4 text-sm">
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Bot className="size-4 text-primary" />
+                            <span className="font-medium">Agent</span>
+                            <Badge variant={agentStatusVariant(activeSession?.agentStatus ?? "stopped")}>{activeSession ? formatAgentStatus(activeSession.agentStatus) : "stopped"}</Badge>
+                          </div>
+                          <p className="text-muted-foreground">{activeSession?.agentRuntime?.message || "Agent details appear when a session is active."}</p>
+                        </div>
+
+                        <Separator />
+
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Activity className="size-4 text-primary" />
+                            <span className="font-medium">Sandbox</span>
+                            <Badge variant="outline">{activeSession?.sandboxRuntime?.mode ?? activeProject?.sandbox.mode ?? "unknown"}</Badge>
+                          </div>
+                          <p className="text-muted-foreground">{activeSession?.workdir ?? "No session selected."}</p>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Dependencies</p>
+                          {activeSession?.sandboxRuntime?.dependencies.missing.length ? (
+                            <div className="space-y-2">
+                              {activeSession.sandboxRuntime.dependencies.missing.map((dependency) => (
+                                <Badge key={dependency} variant="warning" className="mr-2">{dependency}</Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-muted-foreground">No missing sandbox dependencies reported.</p>
+                          )}
+                        </div>
+                      </div>
+                    </ScrollArea>
+                  </TabsContent>
+                </Tabs>
+              </WorkspaceCard>
+            </div>
+
+            <div className="grid min-h-0 gap-4 lg:grid-rows-[auto_minmax(0,1fr)_280px]">
+              <WorkspaceCard title="Session controls" description="Start, stop, and monitor the current workspace session.">
+                <div className="flex flex-col gap-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span data-testid="active-session-label" className="text-lg font-semibold tracking-tight">
+                      Session: {activeSession?.name ?? "none"}
+                    </span>
+                    {activeProject ? <Badge variant="outline">{activeProject.name}</Badge> : null}
+                    {activeSession ? <Badge variant={sessionStatusVariant(activeSession)}>{activeSession.status}</Badge> : null}
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <Button data-testid="start-session-button" type="button" onClick={() => void startSession()} disabled={busyAction || !activeSessionId}>
+                      <Play className="mr-2 size-4" />
+                      Start
+                    </Button>
+                    <Button
+                      data-testid="stop-session-button"
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void stopSession()}
+                      disabled={busyAction || !activeSessionId}
+                    >
+                      <Square className="mr-2 size-4" />
+                      Stop
+                    </Button>
+                    <Button
+                      data-testid="quick-new-session-button"
+                      type="button"
+                      variant="outline"
+                      onClick={() => void createSession()}
+                      disabled={busyAction || !activeProjectId}
+                    >
+                      Create next
+                    </Button>
+                  </div>
+
+                  <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
+                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em]">Runtime</p>
+                      <p className="mt-2">{boot?.runtimeTarget ?? "unknown"}</p>
                     </div>
-                    <div className="grid grid-cols-3 border-t border-border text-[10px] uppercase tracking-[0.08em]">
-                      <button
-                        data-testid="start-session-button"
-                        type="button"
-                        onClick={() => void startSession()}
-                        disabled={busyAction || !activeSessionId}
-                        className="flex items-center justify-center gap-1 border-r border-border py-1 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Play className="size-3" /> start
-                      </button>
-                      <button
-                        data-testid="stop-session-button"
-                        type="button"
-                        onClick={() => void stopSession()}
-                        disabled={busyAction || !activeSessionId}
-                        className="flex items-center justify-center gap-1 border-r border-border py-1 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Square className="size-3" /> stop
-                      </button>
-                      <button
-                        data-testid="quick-new-session-button"
-                        type="button"
-                        onClick={() => void createSession()}
-                        disabled={busyAction || !activeProjectId}
-                        className="py-1 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        new
-                      </button>
+                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em]">Docker</p>
+                      <p className="mt-2">{boot?.docker.available ? "Available" : "Unavailable"}</p>
+                    </div>
+                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em]">Workspace</p>
+                      <p className="mt-2 truncate">{activeSession?.workdir ?? boot?.workspaceRoot ?? "n/a"}</p>
                     </div>
                   </div>
-                </CompactPanel>
+                </div>
+              </WorkspaceCard>
 
-                <CompactPanel title="TERMINAL" className="border-r border-border">
+              <WorkspaceCard
+                title="Editor"
+                description={selectedFilePath ?? "Pick a file from the tree to start editing."}
+                contentClassName="flex min-h-0 flex-col p-0"
+                actions={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void saveFile()}
+                    disabled={!selectedFilePath || busyAction}
+                    aria-label="Save file"
+                  >
+                    <Save className="size-4" />
+                  </Button>
+                }
+              >
+                <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 text-sm">
+                  <span className="truncate text-muted-foreground">{selectedFilePath ?? "No file selected"}</span>
+                  {selectedFilePath ? <Badge variant={editorDirty ? "warning" : "outline"}>{editorDirty ? "unsaved" : "saved"}</Badge> : null}
+                </div>
+                <div className="min-h-0 flex-1 bg-background/50 p-3">
+                  <div className="h-full overflow-hidden rounded-xl border border-border/60 bg-card/70">
+                    <EditorPanel
+                      filePath={selectedFilePath}
+                      value={editorValue}
+                      onChange={(value) => {
+                        setEditorValue(value);
+                        setEditorDirty(true);
+                      }}
+                    />
+                  </div>
+                </div>
+              </WorkspaceCard>
+
+              <WorkspaceCard title="Terminal" description="Interactive shell bound to the active session." contentClassName="min-h-0 p-3 pt-0">
+                <div className="h-full min-h-[16rem] overflow-hidden rounded-xl border border-border/60 bg-[#f8f4ea]">
                   <TerminalPanel session={activeSession} />
-                </CompactPanel>
+                </div>
+              </WorkspaceCard>
+            </div>
 
-                <CompactPanel
-                  title="GIT"
-                  actions={
-                    <button
-                      data-testid="refresh-git-button"
-                      type="button"
-                      onClick={() => void refreshGitStatus()}
-                      className="hover:text-foreground/80"
-                      aria-label="Refresh git status"
-                    >
-                      <RefreshCcw className="size-3" />
-                    </button>
-                  }
-                >
-                  <div className="flex h-full min-h-0 flex-col">
-                    <div className="min-h-0 flex-1 overflow-auto">
-                      {!activeSession ? (
-                        <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">no session selected</div>
-                      ) : !gitStatus ? (
-                        <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">loading git status...</div>
-                      ) : !gitStatus.isRepo ? (
-                        <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">workspace is not a git repository</div>
-                      ) : (
-                        <>
-                          <div className="border-b border-border px-2 py-1">branch: {gitStatus.branch ?? "detached"}</div>
-                          <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">
-                            sync: +{gitStatus.ahead} / -{gitStatus.behind}
-                          </div>
-                          {gitStatus.files.length ? (
-                            gitStatus.files.map((entry: GitStatusEntry, index) => (
-                              <button
-                                data-testid="git-file-row"
-                                data-git-path={entry.path}
-                                type="button"
-                                key={`${entry.path}-${index}`}
-                                onClick={() => setSelectedGitPath(entry.path)}
-                                className={cn(
-                                  "flex w-full items-center gap-2 border-b border-border px-2 py-1 text-left hover:bg-muted",
-                                  selectedGitPath === entry.path && "bg-muted"
-                                )}
-                              >
-                                <span className="shrink-0">{entry.displayStatus}:</span>
-                                <span className="truncate">{entry.path}</span>
-                              </button>
-                            ))
-                          ) : (
-                            <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">working tree clean</div>
-                          )}
-                          <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">
-                            commit: {gitStatus.latestCommit ?? "no commits yet"}
-                          </div>
-                        </>
-                      )}
+            <div className="grid min-h-0 gap-4 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
+              <WorkspaceCard
+                title="Git"
+                description="Track branch state, review changes, and prepare commits."
+                contentClassName="flex min-h-0 flex-col"
+                actions={
+                  <Button
+                    data-testid="refresh-git-button"
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => void refreshGitStatus()}
+                    aria-label="Refresh git status"
+                  >
+                    <RefreshCcw className="size-4" />
+                  </Button>
+                }
+              >
+                {!activeSession ? (
+                  <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">No session selected.</div>
+                ) : !gitStatus ? (
+                  <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">Loading git status...</div>
+                ) : !gitStatus.isRepo ? (
+                  <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">Workspace is not a git repository.</div>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap items-center gap-2 pb-4">
+                      <Badge variant="outline">
+                        <GitBranch className="mr-1 size-3.5" />
+                        {gitStatus.branch ?? "detached"}
+                      </Badge>
+                      <Badge variant="secondary">+{gitStatus.ahead} / -{gitStatus.behind}</Badge>
+                      {selectedGitEntry ? <Badge variant={selectedGitEntry.staged ? "success" : selectedGitEntry.untracked ? "warning" : "outline"}>{selectedGitEntry.displayStatus}</Badge> : null}
                     </div>
-                    <div className="grid grid-cols-3 border-t border-border text-[10px] uppercase tracking-[0.08em]">
-                      <button
+
+                    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-background/60 p-3">
+                      <div className="space-y-2">
+                        {gitStatus.files.length ? (
+                          gitStatus.files.map((entry, index) => (
+                            <button
+                              data-testid="git-file-row"
+                              data-git-path={entry.path}
+                              type="button"
+                              key={`${entry.path}-${index}`}
+                              onClick={() => setSelectedGitPath(entry.path)}
+                              className={cn(
+                                "flex w-full items-center gap-3 rounded-lg border border-border/50 bg-card/70 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/70",
+                                selectedGitPath === entry.path && "bg-primary/10 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.14)]",
+                                gitEntryClass(entry)
+                              )}
+                            >
+                              <Badge variant={entry.staged ? "success" : entry.untracked ? "warning" : "outline"} className="shrink-0">
+                                {entry.displayStatus}
+                              </Badge>
+                              <span className="truncate">{entry.path}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">Working tree clean.</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 text-xs text-muted-foreground">Latest commit: {gitStatus.latestCommit ?? "no commits yet"}</div>
+                    <div className="grid gap-2 pt-4 sm:grid-cols-3">
+                      <Button
                         data-testid="git-stage-button"
                         type="button"
+                        variant="secondary"
                         onClick={() => void stageGitSelection()}
-                        disabled={
-                          gitBusyAction !== null ||
-                          !activeSession ||
-                          !gitStatus?.isRepo ||
-                          !gitStatus.files.length
-                        }
-                        className="border-r border-border py-1 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={gitBusyAction !== null || !activeSession || !gitStatus.files.length}
                       >
-                        [stage]
-                      </button>
-                      <button
+                        Stage
+                      </Button>
+                      <Button
                         data-testid="git-discard-button"
                         type="button"
+                        variant="outline"
                         onClick={() => void discardGitSelection()}
                         disabled={gitBusyAction !== null || !selectedGitEntry}
-                        className="border-r border-border py-1 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        [discard]
-                      </button>
-                      <button
+                        Discard
+                      </Button>
+                      <Button
                         data-testid="git-commit-button"
                         type="button"
-                        onClick={() => void commitGitChanges()}
-                        disabled={gitBusyAction !== null || !activeSession || !gitStatus?.isRepo || !hasStagedChanges}
-                        className="py-1 hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                        onClick={openCommitDialog}
+                        disabled={gitBusyAction !== null || !activeSession || !gitStatus.isRepo || !hasStagedChanges}
                       >
-                        [commit]
-                      </button>
+                        <GitCommitHorizontal className="mr-2 size-4" />
+                        Commit
+                      </Button>
                     </div>
-                  </div>
-                </CompactPanel>
-              </div>
-            </div>
+                  </>
+                )}
+              </WorkspaceCard>
 
-            <div className="min-h-0 overflow-x-auto">
-              <div className="grid h-full min-w-[860px] grid-cols-3">
-                <CompactPanel title="WEB VIEW" className="border-r border-border">
-                  <div className="flex h-full min-h-0 flex-col">
-                    <form className="grid grid-cols-[1fr_auto] border-b border-border" onSubmit={openWebView}>
-                      <input
-                        data-testid="web-url-input"
-                        value={webDraftUrl}
-                        onChange={(event) => setWebDraftUrl(event.target.value)}
-                        placeholder="http://localhost:3000"
-                        className="h-7 w-full border-0 bg-transparent px-2 text-[11px] outline-none placeholder:text-muted-foreground"
-                      />
-                      <button
-                        data-testid="web-open-button"
-                        type="submit"
-                        className="h-7 border-l border-border px-2 text-[10px] uppercase tracking-[0.08em] hover:bg-muted"
-                      >
-                        open
-                      </button>
-                    </form>
-                    <div data-testid="web-status" className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">
-                      status: {webState}
+              <WorkspaceCard title="Web preview" description="Open local or remote targets inside the workspace.">
+                <div className="flex h-full min-h-0 flex-col gap-3">
+                  <form className="flex gap-2" onSubmit={openWebView}>
+                    <Input
+                      data-testid="web-url-input"
+                      value={webDraftUrl}
+                      onChange={(event) => setWebDraftUrl(event.target.value)}
+                      placeholder="http://localhost:3000"
+                    />
+                    <Button data-testid="web-open-button" type="submit">
+                      <Globe className="mr-2 size-4" />
+                      Open
+                    </Button>
+                  </form>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => setWebDraftUrl("http://localhost:3000")}>localhost:3000</Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setWebDraftUrl("http://127.0.0.1:43111/api/health")}>health</Button>
+                  </div>
+
+                  <div data-testid="web-status" className="text-sm text-muted-foreground">status: {webState}</div>
+
+                  {webUrl === "about:blank" ? (
+                    <div className="flex min-h-[16rem] flex-1 items-center justify-center rounded-xl border border-dashed border-border/70 bg-background/60 px-4 text-sm text-muted-foreground">
+                      Enter a URL to load a preview.
                     </div>
-                    {webUrl === "about:blank" ? (
-                      <div className="flex min-h-0 flex-1 items-center justify-center px-2 text-[10px] text-muted-foreground">enter url</div>
-                    ) : (
+                  ) : (
+                    <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl border border-border/60 bg-white shadow-inner">
                       <iframe
                         data-testid="web-iframe"
                         src={webUrl}
                         title="Live web view"
-                        className="min-h-0 flex-1 border-0 bg-white"
+                        className="h-full w-full border-0 bg-white"
                         onLoad={() => setWebState("loaded")}
                         onError={() => setWebState("error")}
                       />
-                    )}
-                  </div>
-                </CompactPanel>
-
-                <CompactPanel
-                  title="FILE VIEW"
-                  className="border-r border-border"
-                  actions={
-                    <button
-                      type="button"
-                      onClick={() => void saveFile()}
-                      disabled={!selectedFilePath || busyAction}
-                      className="hover:text-foreground/80 disabled:cursor-not-allowed disabled:opacity-50"
-                      aria-label="Save file"
-                    >
-                      <Save className="size-3" />
-                    </button>
-                  }
-                >
-                  <div className="flex h-full min-h-0 flex-col">
-                    <div className="border-b border-border px-2 py-1 text-[10px] text-muted-foreground">
-                      {selectedFilePath ?? "// no file selected"}
                     </div>
-                    <div className="min-h-0 flex-1">
-                      <EditorPanel
-                        filePath={selectedFilePath}
-                        value={editorValue}
-                        onChange={(value) => {
-                          setEditorValue(value);
-                          setEditorDirty(true);
-                        }}
-                      />
-                    </div>
-                  </div>
-                </CompactPanel>
-
-                <CompactPanel title="TERMINAL 2">
-                  <TerminalPanel session={activeSession} />
-                </CompactPanel>
-              </div>
+                  )}
+                </div>
+              </WorkspaceCard>
             </div>
-          </div>
+          </section>
+        </div>
 
-          <footer className="flex items-center gap-1 overflow-x-auto border-t border-border px-2 py-1 text-[10px] uppercase tracking-[0.08em]">
-            <span className="shrink-0 text-muted-foreground">Horizontal panel strip -&gt;</span>
-            {(["tree", "chat", "term", "git", "web", "file", "term"] as const).map((item, index) => (
-              <button key={`${item}-${index}`} type="button" className="shrink-0 px-1 hover:bg-muted">
-                [{item}]
-              </button>
-            ))}
-            <span className={cn("ml-auto shrink-0 px-1", errorMessage ? "text-red-700" : "text-muted-foreground")}>
-              {errorMessage || infoMessage}
-            </span>
-          </footer>
-        </section>
+        <Card className="border-border/70 bg-background/80 shadow-sm">
+          <CardContent className="flex flex-col gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <TerminalSquare className="size-4" />
+              <span>{boot?.workspaceRoot ?? "workspace unavailable"}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Badge variant="outline">Ctrl/Cmd+S save</Badge>
+              <Badge variant="outline">Ctrl/Cmd+Shift+N new session</Badge>
+              <Badge variant="outline">Ctrl/Cmd+Tab cycle</Badge>
+            </div>
+            <div className={cn("text-sm", errorMessage ? "text-red-700" : "text-muted-foreground")}>{errorMessage || infoMessage}</div>
+          </CardContent>
+        </Card>
       </div>
+
+      <Dialog open={isCommitDialogOpen} onOpenChange={setIsCommitDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create commit</DialogTitle>
+            <DialogDescription>Use a concise message that explains why the staged changes belong together.</DialogDescription>
+          </DialogHeader>
+
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void commitGitChanges();
+            }}
+          >
+            <Input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="chore: update session state" />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCommitDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={gitBusyAction === "commit" || !commitMessage.trim()}>
+                Create commit
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

@@ -10,13 +10,15 @@
     "dev:web": "concurrently -k \"npm:backend:web\" \"vite\"",
     "dev:web:ui": "vite",
     "build": "vite build",
+    "build:app": "npm run build && electron-builder",
     "preview": "vite preview",
     "preview:web": "concurrently -k \"npm:backend:web\" \"vite preview\"",
     "start": "electron .",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:record": "playwright test --project=chromium"
+    "test:e2e:record": "playwright test --project=chromium",
+    "release": "npm run build:app"
   },
   "keywords": [
     "electron",
@@ -25,8 +27,54 @@
     "sandbox",
     "opencode"
   ],
-  "author": "",
-  "license": "MIT",
+  "author": "Artem Noskov <artem@noartem.ru>",
+  "license": "GPL3",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "server/**/*",
+    "index.html",
+    "package.json",
+    "README.md"
+  ],
+  "build": {
+    "appId": "ru.noartem.thebigide",
+    "productName": "The Big IDE",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server/**/*",
+      "index.html",
+      "package.json",
+      "README.md"
+    ],
+    "npmRebuild": false,
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "tar.gz"
+      ],
+      "category": "Development"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    }
+  },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",
     "@codemirror/lang-html": "^6.4.11",
@@ -36,6 +84,10 @@
     "@codemirror/lang-yaml": "^6.1.2",
     "@fontsource/ibm-plex-mono": "^5.2.6",
     "@fontsource/space-grotesk": "^5.2.7",
+    "@radix-ui/react-dialog": "^1.1.15",
+    "@radix-ui/react-scroll-area": "^1.2.10",
+    "@radix-ui/react-separator": "^1.1.8",
+    "@radix-ui/react-tabs": "^1.1.13",
     "@uiw/react-codemirror": "^4.25.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -57,6 +109,7 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.0.0",
     "electron": "^38.1.0",
+    "electron-builder": "^26.8.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.2",

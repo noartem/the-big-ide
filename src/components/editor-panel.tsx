@@ -47,7 +47,7 @@ function resolveLanguageExtensions(filePath: string | null) {
 export function EditorPanel({ filePath, value, onChange }: EditorPanelProps) {
   if (!filePath) {
     return (
-      <div className="flex h-full items-center justify-center px-2 text-center text-[11px] text-muted-foreground">
+      <div className="flex h-full items-center justify-center px-4 text-center text-sm text-muted-foreground">
         Select a file in the tree to start editing.
       </div>
     );

@@ -32,7 +32,7 @@ export function FileTree({ nodes, selectedFilePath, onOpenFile, isLoading }: Fil
   };
 
   const renderNode = (node: FileNode, depth: number) => {
-    const rowClassName = "group flex w-full items-center gap-1 px-1 py-[2px] text-left text-[11px] leading-4";
+    const rowClassName = "group flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs leading-4 transition-colors";
 
     if (node.type === "directory") {
       const isOpen = normalizedExpanded[node.path] ?? true;
@@ -40,7 +40,7 @@ export function FileTree({ nodes, selectedFilePath, onOpenFile, isLoading }: Fil
         <div key={node.path}>
           <button
             type="button"
-            className={cn(rowClassName, "text-foreground/90 hover:bg-muted")}
+            className={cn(rowClassName, "text-foreground/90 hover:bg-muted/80")}
             style={{ paddingLeft: `${depth * 12 + 6}px` }}
             onClick={() => toggleDir(node.path)}
           >
@@ -63,8 +63,8 @@ export function FileTree({ nodes, selectedFilePath, onOpenFile, isLoading }: Fil
         style={{ paddingLeft: `${depth * 12 + 6}px` }}
         className={cn(
           rowClassName,
-          "text-foreground/80 hover:bg-muted",
-          selectedFilePath === node.path && "bg-muted text-foreground"
+          "text-foreground/80 hover:bg-muted/80",
+          selectedFilePath === node.path && "bg-primary/10 text-foreground shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.14)]"
         )}
         onClick={() => onOpenFile(node.path)}
       >
@@ -76,12 +76,12 @@ export function FileTree({ nodes, selectedFilePath, onOpenFile, isLoading }: Fil
   };
 
   if (isLoading) {
-    return <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">Scanning workspace...</div>;
+    return <div className="flex h-full items-center justify-center px-3 text-xs text-muted-foreground">Scanning workspace...</div>;
   }
 
   if (!nodes.length) {
-    return <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">No files yet.</div>;
+    return <div className="flex h-full items-center justify-center px-3 text-xs text-muted-foreground">No files yet.</div>;
   }
 
-  return <div className="h-full overflow-auto">{nodes.map((node) => renderNode(node, 0))}</div>;
+  return <div className="h-full space-y-0.5 overflow-auto p-2">{nodes.map((node) => renderNode(node, 0))}</div>;
 }
