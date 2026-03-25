@@ -60,3 +60,30 @@ This creates desktop artifacts in `release/` for the current OS via `electron-bu
 - Web mode uses `server/web-backend.cjs` and the same runtime model via HTTP + SSE bridge (`VITE_BIGIDE_BACKEND_URL` can override backend URL).
 - Terminal and OpenCode agent run inside the session sandbox container when Docker mode is enabled, with host fallback.
 - Backend state for web mode is persisted at `~/.big-ide/state.web.json`.
+
+<!-- repo-task-proof-loop:start -->
+## Repo task proof loop
+
+For substantial features, refactors, and bug fixes, use the repo-task-proof-loop workflow.
+
+Required artifact path:
+- Keep all task artifacts in `.agent/tasks/<TASK_ID>/` inside this repository.
+
+Required sequence:
+1. Freeze `.agent/tasks/<TASK_ID>/spec.md` before implementation.
+2. Implement against explicit acceptance criteria (`AC1`, `AC2`, ...).
+3. Create `evidence.md`, `evidence.json`, and raw artifacts.
+4. Run a fresh verification pass against the current codebase and rerun checks.
+5. If verification is not `PASS`, write `problems.md`, apply the smallest safe fix, and reverify.
+
+Hard rules:
+- Do not claim completion unless every acceptance criterion is `PASS`.
+- Verifiers judge current code and current command results, not prior chat claims.
+- Fixers should make the smallest defensible diff.
+
+Installed workflow agents:
+- `.opencode/agents/task-spec-freezer.md`
+- `.opencode/agents/task-builder.md`
+- `.opencode/agents/task-verifier.md`
+- `.opencode/agents/task-fixer.md`
+<!-- repo-task-proof-loop:end -->

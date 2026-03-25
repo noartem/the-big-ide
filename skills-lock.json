@@ -46,6 +46,11 @@
       "sourceType": "github",
       "computedHash": "d004c5e5e2e7132e1d64e9c2a339db7f7aaa69053a5c19cddc210dd35dd6fff5"
     },
+    "repo-task-proof-loop": {
+      "source": "noartem/repo-task-proof-loop",
+      "sourceType": "github",
+      "computedHash": "ea37613bf106c4f28b2df92ce541c40ee82f41fe595fc4e6c11b3d8ebb41c482"
+    },
     "swiftui-ui-patterns": {
       "source": "dimillian/skills",
       "sourceType": "github",
