@@ -1,72 +1,63 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Activity,
-  Bot,
-  FolderPlus,
-  FolderTree,
-  GitBranch,
-  GitCommitHorizontal,
-  Globe,
-  Play,
-  RefreshCcw,
-  Save,
-  Square,
-  TerminalSquare
-} from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, ChevronRight, GitBranch, GitCommitHorizontal, Globe, GripHorizontal, Play, RefreshCcw, Save, Square, X } from "lucide-react";
 
+import { AgentPanel } from "@/components/agent-panel";
 import { EditorPanel } from "@/components/editor-panel";
 import { FileTree } from "@/components/file-tree";
 import { TerminalPanel } from "@/components/terminal-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PanelShell } from "@/components/ui/panel-shell";
 import { cn } from "@/lib/utils";
-import type { BootstrapPayload, FileNode, GitStatusEntry, GitStatusSnapshot, Project, Session } from "@/types/big-ide";
-
-type SessionFilter = "all" | "active";
-type BadgeVariant = "default" | "secondary" | "outline" | "success" | "warning" | "danger";
+import type { BootstrapPayload, FileNode, GitStatusEntry, GitStatusSnapshot, PanelId, Project, Session } from "@/types/big-ide";
 
 const PROJECTS_CHANGED_EVENT = "bigide:projects-changed";
+const DEFAULT_BROWSER_URL = "http://localhost:3000";
 
-type WorkspaceCardProps = {
-  title: string;
-  description?: string;
-  children: ReactNode;
-  className?: string;
-  actions?: ReactNode;
-  contentClassName?: string;
+type BadgeVariant = "default" | "secondary" | "outline" | "success" | "warning" | "danger";
+type SessionPanelKind = Exclude<PanelId, "projects">;
+type EditorBuffer = { value: string; dirty: boolean };
+type SessionEditorState = {
+  buffers: Record<string, EditorBuffer>;
+};
+type SessionPanelInstance = {
+  id: string;
+  kind: SessionPanelKind;
+  filePath: string | null;
 };
 
-function WorkspaceCard({ title, description, children, className, actions, contentClassName }: WorkspaceCardProps) {
-  return (
-    <Card className={cn("flex min-h-0 flex-col overflow-hidden border-border/70 bg-card/90 shadow-lg", className)}>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 border-b border-border/60 pb-4">
-        <div className="space-y-1">
-          <CardTitle>{title}</CardTitle>
-          {description ? <CardDescription>{description}</CardDescription> : null}
-        </div>
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
-      </CardHeader>
-      <CardContent className={cn("min-h-0 flex-1", contentClassName)}>{children}</CardContent>
-    </Card>
-  );
-}
+const PANEL_LABELS: Record<SessionPanelKind, string> = {
+  agent: "Agent",
+  files: "Files",
+  editor: "Editor",
+  terminal: "Terminal",
+  git: "Git",
+  browser: "Browser"
+};
+
+const NEW_PANEL_OPTIONS: Array<{ kind: SessionPanelKind; label: string; description: string }> = [
+  { kind: "agent", label: "Agent", description: "Add another OpenCode surface." },
+  { kind: "files", label: "Files", description: "Browse the workspace tree in a separate panel." },
+  { kind: "terminal", label: "Terminal", description: "Open another terminal view for the session." },
+  { kind: "git", label: "Git", description: "Inspect git state in an additional panel." },
+  { kind: "browser", label: "Browser", description: "Open another preview/browser panel." }
+];
 
 function sessionStatusVariant(session: Session): BadgeVariant {
   if (session.status === "running") {
     return "success";
   }
+
   if (session.agentStatus === "failed") {
     return "danger";
   }
+
   if (session.agentStatus === "missing-opencode") {
     return "warning";
   }
+
   return "secondary";
 }
 
@@ -74,12 +65,15 @@ function agentStatusVariant(status: Session["agentStatus"]): BadgeVariant {
   if (status === "running") {
     return "success";
   }
+
   if (status === "failed") {
     return "danger";
   }
+
   if (status === "missing-opencode") {
     return "warning";
   }
+
   return "outline";
 }
 
@@ -87,9 +81,11 @@ function gitEntryClass(entry: GitStatusEntry) {
   if (entry.untracked) {
     return "text-amber-900";
   }
+
   if (entry.staged) {
     return "text-emerald-900";
   }
+
   return "text-foreground";
 }
 
@@ -114,37 +110,104 @@ function normalizeWebUrl(value: string) {
   return `https://${trimmed}`;
 }
 
+function createEmptyEditorState(): SessionEditorState {
+  return {
+    buffers: {}
+  };
+}
+
+function createPanelInstance(kind: SessionPanelKind, filePath: string | null = null): SessionPanelInstance {
+  const id = globalThis.crypto?.randomUUID?.() ?? `${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return { id, kind, filePath };
+}
+
+function createDefaultPanels() {
+  return [createPanelInstance("agent")];
+}
+
+function getAgentChatUrl(session: Session | null) {
+  if (!session?.agentRuntime?.port) {
+    return null;
+  }
+
+  return `http://127.0.0.1:${session.agentRuntime.port}`;
+}
+
+function fileLabel(filePath: string) {
+  return filePath.split("/").filter(Boolean).pop() ?? filePath;
+}
+
+function toRelativePathLabel(basePath: string | null | undefined, targetPath: string | null | undefined, rootLabel = "./") {
+  if (!targetPath) {
+    return "";
+  }
+
+  if (!basePath) {
+    return targetPath;
+  }
+
+  const normalizedBase = basePath.replace(/\/+$/, "");
+  const normalizedTarget = targetPath.replace(/\/+$/, "");
+
+  if (normalizedTarget === normalizedBase) {
+    return rootLabel;
+  }
+
+  if (normalizedTarget.startsWith(`${normalizedBase}/`)) {
+    return normalizedTarget.slice(normalizedBase.length + 1);
+  }
+
+  return targetPath;
+}
+
+function movePanel<T>(items: T[], fromIndex: number, toIndex: number) {
+  if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) {
+    return items;
+  }
+
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 export default function App() {
   const [boot, setBoot] = useState<BootstrapPayload | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [panelInstancesBySession, setPanelInstancesBySession] = useState<Record<string, SessionPanelInstance[]>>({});
+  const [focusedPanelIdBySession, setFocusedPanelIdBySession] = useState<Record<string, string | null>>({});
+  const [selectedFilePathBySession, setSelectedFilePathBySession] = useState<Record<string, string | null>>({});
 
   const [treeNodes, setTreeNodes] = useState<FileNode[]>([]);
   const [treeLoading, setTreeLoading] = useState(false);
+  const [editorStateBySession, setEditorStateBySession] = useState<Record<string, SessionEditorState>>({});
 
-  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
-  const [editorValue, setEditorValue] = useState("");
-  const [editorDirty, setEditorDirty] = useState(false);
-
-  const [newProjectName, setNewProjectName] = useState("The Big IDE");
-  const [newSessionName, setNewSessionName] = useState("backend-debug");
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newSessionName, setNewSessionName] = useState("");
+  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [isSessionDialogOpen, setIsSessionDialogOpen] = useState(false);
+  const [sessionCreationProjectId, setSessionCreationProjectId] = useState<string | null>(null);
+  const [isPanelDialogOpen, setIsPanelDialogOpen] = useState(false);
+  const [draggedPanelId, setDraggedPanelId] = useState<string | null>(null);
+  const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
 
   const [infoMessage, setInfoMessage] = useState("Initializing workspace...");
   const [errorMessage, setErrorMessage] = useState("");
   const [busyAction, setBusyAction] = useState(false);
 
-  const [agentLogs, setAgentLogs] = useState<Record<string, string[]>>({});
-  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
   const [gitStatus, setGitStatus] = useState<GitStatusSnapshot | null>(null);
   const [selectedGitPath, setSelectedGitPath] = useState<string | null>(null);
   const [gitBusyAction, setGitBusyAction] = useState<"stage" | "discard" | "commit" | null>(null);
   const [isCommitDialogOpen, setIsCommitDialogOpen] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
 
-  const [webDraftUrl, setWebDraftUrl] = useState("http://localhost:3000");
-  const [webUrl, setWebUrl] = useState("http://localhost:3000");
+  const [webDraftUrl, setWebDraftUrl] = useState(DEFAULT_BROWSER_URL);
+  const [webUrl, setWebUrl] = useState("about:blank");
   const [webState, setWebState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+
+  const panelRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
@@ -156,28 +219,60 @@ export default function App() {
     [activeProject, activeSessionId]
   );
 
-  const activeAgentLogs = activeSession ? agentLogs[activeSession.id] ?? [] : [];
+  const activePanels = useMemo(
+    () => (activeSession ? panelInstancesBySession[activeSession.id] ?? [] : []),
+    [activeSession, panelInstancesBySession]
+  );
 
-  const sidebarProjects = useMemo(() => {
-    if (sessionFilter === "all") {
-      return projects;
+  const activeFocusedPanelId = useMemo(() => {
+    if (!activeSession) {
+      return null;
     }
 
-    return projects
-      .map((project) => ({
-        ...project,
-        sessions: project.sessions.filter((session) => session.status === "running")
-      }))
-      .filter((project) => project.sessions.length > 0 || project.id === activeProjectId);
-  }, [activeProjectId, projects, sessionFilter]);
+    const focused = focusedPanelIdBySession[activeSession.id];
+    if (focused && activePanels.some((panel) => panel.id === focused)) {
+      return focused;
+    }
+
+    return activePanels[0]?.id ?? null;
+  }, [activePanels, activeSession, focusedPanelIdBySession]);
+
+  const activeSelectedFilePath = useMemo(() => {
+    if (!activeSession) {
+      return null;
+    }
+
+    return selectedFilePathBySession[activeSession.id] ?? null;
+  }, [activeSession, selectedFilePathBySession]);
+
+  const activeEditorPanel = useMemo(
+    () => activePanels.find((panel) => panel.id === activeFocusedPanelId && panel.kind === "editor") ?? null,
+    [activeFocusedPanelId, activePanels]
+  );
+
+  const activeEditorBuffer = useMemo(() => {
+    if (!activeSession || !activeEditorPanel?.filePath) {
+      return null;
+    }
+
+    return editorStateBySession[activeSession.id]?.buffers[activeEditorPanel.filePath] ?? null;
+  }, [activeEditorPanel, activeSession, editorStateBySession]);
+
+  const activeAgentUrl = useMemo(() => getAgentChatUrl(activeSession), [activeSession]);
+  const activeSandboxMode = activeSession?.sandboxRuntime?.mode ?? activeProject?.sandbox.mode ?? "pending";
 
   const refreshProjects = useCallback(async () => {
     if (!window.bigIDE) {
       return;
     }
 
-    const latest = await window.bigIDE.projects.list();
-    setProjects(latest);
+    try {
+      const latest = await window.bigIDE.projects.list();
+      setProjects(latest);
+      setErrorMessage("");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to load projects");
+    }
   }, []);
 
   const bootstrapWorkspace = useCallback(async () => {
@@ -190,7 +285,7 @@ export default function App() {
       const payload = await window.bigIDE.bootstrap();
       setBoot(payload);
       setProjects(payload.projects);
-      setInfoMessage(payload.runtimeTarget === "web" ? "Web runtime ready" : "Workspace ready");
+      setInfoMessage("Workspace ready");
       setErrorMessage("");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to initialize workspace");
@@ -218,42 +313,104 @@ export default function App() {
     }
   }, [activeSession]);
 
-  const openFile = useCallback(async (filePath: string) => {
-    if (!window.bigIDE) {
-      return;
-    }
-
-    try {
-      const content = await window.bigIDE.fs.readFile({ filePath });
-      setSelectedFilePath(filePath);
-      setEditorValue(content);
-      setEditorDirty(false);
-      setErrorMessage("");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to open file");
-    }
+  const setSessionEditorState = useCallback((sessionId: string, updater: (current: SessionEditorState) => SessionEditorState) => {
+    setEditorStateBySession((previous) => ({
+      ...previous,
+      [sessionId]: updater(previous[sessionId] ?? createEmptyEditorState())
+    }));
   }, []);
 
-  const saveFile = useCallback(async () => {
-    if (!window.bigIDE || !selectedFilePath) {
-      return;
-    }
+  const focusPanel = useCallback((sessionId: string, panelId: string | null) => {
+    setFocusedPanelIdBySession((previous) => ({
+      ...previous,
+      [sessionId]: panelId
+    }));
+  }, []);
 
-    try {
-      setBusyAction(true);
-      await window.bigIDE.fs.writeFile({
-        filePath: selectedFilePath,
-        content: editorValue
+  const appendPanel = useCallback(
+    (sessionId: string, kind: SessionPanelKind, filePath: string | null = null) => {
+      const panel = createPanelInstance(kind, filePath);
+      setPanelInstancesBySession((previous) => ({
+        ...previous,
+        [sessionId]: [...(previous[sessionId] ?? []), panel]
+      }));
+      focusPanel(sessionId, panel.id);
+      return panel;
+    },
+    [focusPanel]
+  );
+
+  const removePanel = useCallback(
+    (sessionId: string, panelId: string) => {
+      const currentPanels = panelInstancesBySession[sessionId] ?? [];
+      const currentIndex = currentPanels.findIndex((panel) => panel.id === panelId);
+      if (currentIndex === -1) {
+        return;
+      }
+
+      const nextPanels = currentPanels.filter((panel) => panel.id !== panelId);
+      setPanelInstancesBySession((previous) => ({
+        ...previous,
+        [sessionId]: nextPanels
+      }));
+
+      setFocusedPanelIdBySession((previous) => {
+        if (previous[sessionId] !== panelId) {
+          return previous;
+        }
+
+        const nextFocus = nextPanels[currentIndex] ?? nextPanels[currentIndex - 1] ?? null;
+        return {
+          ...previous,
+          [sessionId]: nextFocus?.id ?? null
+        };
       });
-      setEditorDirty(false);
-      setInfoMessage(`Saved ${selectedFilePath}`);
-      await reloadTree();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to save file");
-    } finally {
-      setBusyAction(false);
-    }
-  }, [editorValue, reloadTree, selectedFilePath]);
+    },
+    [panelInstancesBySession]
+  );
+
+  const saveEditorFile = useCallback(
+    async (filePath: string) => {
+      if (!window.bigIDE || !activeSession) {
+        return;
+      }
+
+      const buffer = editorStateBySession[activeSession.id]?.buffers[filePath];
+      if (!buffer) {
+        return;
+      }
+
+      try {
+        setBusyAction(true);
+        await window.bigIDE.fs.writeFile({
+          filePath,
+          content: buffer.value
+        });
+        setSessionEditorState(activeSession.id, (current) => ({
+          ...current,
+          buffers: {
+            ...current.buffers,
+            [filePath]: {
+              value: buffer.value,
+              dirty: false
+            }
+          }
+        }));
+        setInfoMessage(`Saved ${toRelativePathLabel(activeSession.workdir, filePath)}`);
+        await reloadTree();
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to save file");
+      } finally {
+        setBusyAction(false);
+      }
+    },
+    [activeSession, editorStateBySession, reloadTree, setSessionEditorState]
+  );
+
+  const openProjectDialog = useCallback(() => {
+    setNewProjectName("");
+    setIsProjectDialogOpen(true);
+  }, []);
 
   const createProject = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -271,8 +428,10 @@ export default function App() {
         setBusyAction(true);
         const created = await window.bigIDE.projects.create({ name });
         await refreshProjects();
-        setNewProjectName("");
         setActiveProjectId(created.id);
+        setActiveSessionId(created.sessions[0]?.id ?? null);
+        setIsProjectDialogOpen(false);
+        setNewProjectName("");
         setInfoMessage(`Project created: ${created.name}`);
         setErrorMessage("");
       } catch (error) {
@@ -284,43 +443,59 @@ export default function App() {
     [newProjectName, refreshProjects]
   );
 
-  const createSession = useCallback(async () => {
-    if (!window.bigIDE || !activeProjectId) {
+  const openSessionDialog = useCallback((projectId: string | null) => {
+    if (!projectId) {
       return;
     }
+
+    setSessionCreationProjectId(projectId);
+    setNewSessionName("");
+    setIsSessionDialogOpen(true);
+  }, []);
+
+  const createSession = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!window.bigIDE || !sessionCreationProjectId) {
+        return;
+      }
 
       try {
         setBusyAction(true);
         const created = await window.bigIDE.sessions.create({
-          projectId: activeProjectId,
+          projectId: sessionCreationProjectId,
           name: newSessionName.trim() || undefined
         });
         await refreshProjects();
-        setNewSessionName("");
+        setActiveProjectId(sessionCreationProjectId);
         setActiveSessionId(created.id);
+        setIsSessionDialogOpen(false);
+        setNewSessionName("");
         setInfoMessage(`Session created: ${created.name}`);
         setErrorMessage("");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to create session");
-    } finally {
-      setBusyAction(false);
-    }
-  }, [activeProjectId, newSessionName, refreshProjects]);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to create session");
+      } finally {
+        setBusyAction(false);
+      }
+    },
+    [newSessionName, refreshProjects, sessionCreationProjectId]
+  );
 
   const startSession = useCallback(async () => {
     if (!window.bigIDE || !activeProjectId || !activeSessionId) {
       return;
     }
 
-      try {
-        setBusyAction(true);
-        await window.bigIDE.sessions.start({
-          projectId: activeProjectId,
-          sessionId: activeSessionId
-        });
-        await refreshProjects();
-        setInfoMessage("Session started");
-        setErrorMessage("");
+    try {
+      setBusyAction(true);
+      await window.bigIDE.sessions.start({
+        projectId: activeProjectId,
+        sessionId: activeSessionId
+      });
+      await refreshProjects();
+      setInfoMessage("Session started");
+      setErrorMessage("");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to start session");
     } finally {
@@ -333,15 +508,15 @@ export default function App() {
       return;
     }
 
-      try {
-        setBusyAction(true);
-        await window.bigIDE.sessions.stop({
-          projectId: activeProjectId,
-          sessionId: activeSessionId
-        });
-        await refreshProjects();
-        setInfoMessage("Session stopped");
-        setErrorMessage("");
+    try {
+      setBusyAction(true);
+      await window.bigIDE.sessions.stop({
+        projectId: activeProjectId,
+        sessionId: activeSessionId
+      });
+      await refreshProjects();
+      setInfoMessage("Session stopped");
+      setErrorMessage("");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to stop session");
     } finally {
@@ -361,14 +536,13 @@ export default function App() {
     setInfoMessage(`Switched to ${sessions[nextIndex]?.name ?? "session"}`);
   }, [activeProject, activeSessionId]);
 
-  const chatLines = useMemo(() => activeAgentLogs.slice(-80), [activeAgentLogs]);
-
   const applyGitSnapshot = useCallback((snapshot: GitStatusSnapshot) => {
     setGitStatus(snapshot);
     setSelectedGitPath((currentPath) => {
       if (currentPath && snapshot.files.some((entry) => entry.path === currentPath)) {
         return currentPath;
       }
+
       return snapshot.files[0]?.path ?? null;
     });
   }, []);
@@ -395,6 +569,7 @@ export default function App() {
         cwd: activeSession.workdir
       });
       applyGitSnapshot(snapshot);
+      setErrorMessage("");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to load git status");
     }
@@ -491,6 +666,83 @@ export default function App() {
     [webDraftUrl]
   );
 
+  const addPanelToActiveSession = useCallback(
+    (kind: SessionPanelKind) => {
+      if (!activeSession) {
+        return;
+      }
+
+      appendPanel(activeSession.id, kind);
+      setIsPanelDialogOpen(false);
+    },
+    [activeSession, appendPanel]
+  );
+
+  const openFile = useCallback(
+    async (filePath: string) => {
+      if (!window.bigIDE || !activeSession) {
+        return;
+      }
+
+      const existingPanel = (panelInstancesBySession[activeSession.id] ?? []).find(
+        (panel) => panel.kind === "editor" && panel.filePath === filePath
+      );
+
+      setSelectedFilePathBySession((previous) => ({
+        ...previous,
+        [activeSession.id]: filePath
+      }));
+
+      if (existingPanel) {
+        focusPanel(activeSession.id, existingPanel.id);
+        setErrorMessage("");
+        return;
+      }
+
+      const existingBuffer = editorStateBySession[activeSession.id]?.buffers[filePath];
+      if (existingBuffer) {
+        appendPanel(activeSession.id, "editor", filePath);
+        setErrorMessage("");
+        return;
+      }
+
+      try {
+        const content = await window.bigIDE.fs.readFile({ filePath });
+        setSessionEditorState(activeSession.id, (current) => ({
+          ...current,
+          buffers: {
+            ...current.buffers,
+            [filePath]: { value: content, dirty: false }
+          }
+        }));
+        appendPanel(activeSession.id, "editor", filePath);
+        setErrorMessage("");
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to open file");
+      }
+    },
+    [activeSession, appendPanel, editorStateBySession, focusPanel, panelInstancesBySession, setSessionEditorState]
+  );
+
+  const moveSessionPanel = useCallback(
+    (sessionId: string, sourcePanelId: string, targetPanelId: string) => {
+      setPanelInstancesBySession((previous) => {
+        const currentPanels = previous[sessionId] ?? [];
+        const sourceIndex = currentPanels.findIndex((panel) => panel.id === sourcePanelId);
+        const targetIndex = currentPanels.findIndex((panel) => panel.id === targetPanelId);
+        if (sourceIndex === -1 || targetIndex === -1) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [sessionId]: movePanel(currentPanels, sourceIndex, targetIndex)
+        };
+      });
+    },
+    []
+  );
+
   useEffect(() => {
     void bootstrapWorkspace();
   }, [bootstrapWorkspace]);
@@ -506,6 +758,7 @@ export default function App() {
       if (previous && projects.some((project) => project.id === previous)) {
         return previous;
       }
+
       return projects[0].id;
     });
   }, [projects]);
@@ -520,28 +773,97 @@ export default function App() {
       if (previous && activeProject.sessions.some((session) => session.id === previous)) {
         return previous;
       }
+
       return activeProject.sessions[0]?.id ?? null;
     });
   }, [activeProject]);
 
   useEffect(() => {
-    setSelectedFilePath(null);
-    setEditorValue("");
-    setEditorDirty(false);
-    void reloadTree();
-    void refreshGitStatus();
-  }, [activeSession?.id, refreshGitStatus, reloadTree]);
+    setExpandedProjects((previous) => {
+      const nextEntries = projects.map((project) => [project.id, previous[project.id] ?? project.id === activeProjectId]);
+      const next = Object.fromEntries(nextEntries) as Record<string, boolean>;
+      const previousKeys = Object.keys(previous);
+      const nextKeys = Object.keys(next);
+      const changed =
+        previousKeys.length !== nextKeys.length ||
+        nextKeys.some((key) => previous[key] !== next[key]);
+
+      return changed ? next : previous;
+    });
+  }, [activeProjectId, projects]);
 
   useEffect(() => {
-    if (!activeSession?.agentRuntime?.port) {
+    if (!activeProjectId) {
       return;
     }
 
-    const sessionUrl = `http://127.0.0.1:${activeSession.agentRuntime.port}`;
-    setWebDraftUrl(sessionUrl);
-    setWebUrl(sessionUrl);
-    setWebState("loading");
-  }, [activeSession?.agentRuntime?.port]);
+    setExpandedProjects((previous) => {
+      if (previous[activeProjectId]) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [activeProjectId]: true
+      };
+    });
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      return;
+    }
+
+    setPanelInstancesBySession((previous) => {
+      if (previous[activeSessionId]) {
+        return previous;
+      }
+
+      return {
+        ...previous,
+        [activeSessionId]: createDefaultPanels()
+      };
+    });
+
+    setFocusedPanelIdBySession((previous) => {
+      if (previous[activeSessionId]) {
+        return previous;
+      }
+
+      const defaultPanels = panelInstancesBySession[activeSessionId] ?? createDefaultPanels();
+      return {
+        ...previous,
+        [activeSessionId]: defaultPanels[0]?.id ?? null
+      };
+    });
+  }, [activeSessionId, panelInstancesBySession]);
+
+  useEffect(() => {
+    if (!activeSession || !activeFocusedPanelId) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      panelRefs.current[activeFocusedPanelId]?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center"
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeFocusedPanelId, activeSession]);
+
+  useEffect(() => {
+    setIsCommitDialogOpen(false);
+    setCommitMessage("");
+    setIsPanelDialogOpen(false);
+    setWebDraftUrl(DEFAULT_BROWSER_URL);
+    setWebUrl("about:blank");
+    setWebState("idle");
+    void reloadTree();
+    void refreshGitStatus();
+  }, [activeSession?.id, refreshGitStatus, reloadTree]);
 
   useEffect(() => {
     if (!activeSession) {
@@ -556,43 +878,6 @@ export default function App() {
   }, [activeSession?.id, refreshGitStatus]);
 
   useEffect(() => {
-    if (!window.bigIDE) {
-      return;
-    }
-
-    const stopLog = window.bigIDE.agent.onLog((payload) => {
-      const lines = payload.chunk
-        .split(/\r?\n/)
-        .map((line) => line.trimEnd())
-        .filter(Boolean)
-        .map((line) => `[${payload.stream}] ${line}`);
-
-      if (!lines.length) {
-        return;
-      }
-
-      setAgentLogs((previous) => ({
-        ...previous,
-        [payload.sessionId]: [...(previous[payload.sessionId] ?? []), ...lines].slice(-300)
-      }));
-    });
-
-    const stopStatus = window.bigIDE.agent.onStatus((payload) => {
-      const statusLine = `[status] ${payload.status}${payload.message ? `: ${payload.message}` : ""}`;
-      setAgentLogs((previous) => ({
-        ...previous,
-        [payload.sessionId]: [...(previous[payload.sessionId] ?? []), statusLine].slice(-300)
-      }));
-      void refreshProjects();
-    });
-
-    return () => {
-      stopLog();
-      stopStatus();
-    };
-  }, [refreshProjects]);
-
-  useEffect(() => {
     const syncProjects = () => {
       void refreshProjects();
     };
@@ -602,18 +887,43 @@ export default function App() {
   }, [refreshProjects]);
 
   useEffect(() => {
+    if (!window.bigIDE) {
+      return;
+    }
+
+    const stopStatus = window.bigIDE.agent.onStatus((payload) => {
+      if (payload.sessionId === activeSessionId) {
+        setInfoMessage(`Agent ${payload.status}${payload.message ? `: ${payload.message}` : ""}`);
+      }
+      void refreshProjects();
+    });
+
+    return () => {
+      stopStatus();
+    };
+  }, [activeSessionId, refreshProjects]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
 
       if ((event.metaKey || event.ctrlKey) && key === "s") {
+        if (!activeEditorPanel?.filePath) {
+          return;
+        }
+
         event.preventDefault();
-        void saveFile();
+        void saveEditorFile(activeEditorPanel.filePath);
         return;
       }
 
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && key === "n") {
+        if (!activeProjectId) {
+          return;
+        }
+
         event.preventDefault();
-        void createSession();
+        openSessionDialog(activeProjectId);
         return;
       }
 
@@ -625,429 +935,268 @@ export default function App() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [createSession, cycleSession, saveFile]);
+  }, [activeEditorPanel, activeProjectId, cycleSession, openSessionDialog, saveEditorFile]);
 
-  if (!window.bigIDE) {
-    return (
-      <main className="flex h-full items-center justify-center bg-background p-6 font-sans">
-        <Card className="max-w-lg border-border/70 bg-background/90 shadow-xl">
-          <CardHeader>
-            <CardTitle>Backend unavailable</CardTitle>
-            <CardDescription>Use `npm run dev` or `npm run dev:web` to connect the workspace runtime.</CardDescription>
-          </CardHeader>
-        </Card>
-      </main>
-    );
-  }
+  const renderDragHandle = useCallback(
+    (label: string) => (
+      <span className="inline-flex size-7 items-center justify-center text-muted-foreground" aria-hidden="true" title={`Drag ${label} panel`}>
+        <GripHorizontal className="size-4" />
+      </span>
+    ),
+    []
+  );
 
-  return (
-    <main className="h-full overflow-hidden text-foreground">
-      <div className="glass-grid flex h-full min-h-0 flex-col gap-4 overflow-auto p-4">
-        <Card className="border-border/70 bg-background/85 shadow-xl backdrop-blur-md">
-          <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-[0.24em] text-primary">The Big IDE</p>
-              <h1 className="text-3xl font-semibold tracking-tight">Shadcn workspace cockpit</h1>
-              <p className="max-w-3xl text-sm text-muted-foreground">
-                Manage projects, sessions, code, git state, and browser previews from one responsive control surface.
-              </p>
-            </div>
+  const renderClosePanelButton = useCallback(
+    (panel: SessionPanelInstance, label: string) => {
+      if (!activeSession) {
+        return null;
+      }
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="outline">{boot?.runtimeTarget ?? "unknown"}</Badge>
-              <Badge variant={boot?.docker.available ? "success" : "warning"}>
-                {boot?.docker.available ? `docker ${boot?.docker.version || "ready"}` : "docker unavailable"}
-              </Badge>
-              <Badge variant={activeSession ? sessionStatusVariant(activeSession) : "secondary"}>
-                {activeSession ? activeSession.status : "no active session"}
-              </Badge>
-              {activeSession ? <Badge variant={agentStatusVariant(activeSession.agentStatus)}>agent {formatAgentStatus(activeSession.agentStatus)}</Badge> : null}
-            </div>
-          </CardContent>
-        </Card>
+      return (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 rounded-none"
+          onClick={() => removePanel(activeSession.id, panel.id)}
+          aria-label={`Close ${label} panel`}
+        >
+          <X className="size-4" />
+        </Button>
+      );
+    },
+    [activeSession, removePanel]
+  );
 
-        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
-          <WorkspaceCard
-            title="Projects"
-            description="Create projects, spin up sessions, and filter the workspace list."
-            className="min-h-[36rem] xl:min-h-0"
-            contentClassName="flex min-h-0 flex-1 flex-col gap-4"
-          >
-            <form className="grid gap-3" onSubmit={createProject}>
-              <div className="grid gap-2">
-                <Input
-                  data-testid="project-name-input"
-                  value={newProjectName}
-                  onChange={(event) => setNewProjectName(event.target.value)}
-                  placeholder="New project"
-                />
-                <Button data-testid="create-project-button" type="submit" disabled={busyAction || !newProjectName.trim()}>
-                  <FolderPlus className="mr-2 size-4" />
-                  Create project
-                </Button>
-              </div>
-            </form>
+  const renderPanel = useCallback(
+    (panel: SessionPanelInstance) => {
+      if (!activeSession) {
+        return null;
+      }
 
-            <div className="grid gap-2">
-              <Input
-                data-testid="session-name-input"
-                value={newSessionName}
-                onChange={(event) => setNewSessionName(event.target.value)}
-                placeholder="backend-debug"
-              />
-              <Button
-                data-testid="create-session-button"
-                type="button"
-                variant="secondary"
-                onClick={() => void createSession()}
-                disabled={busyAction || !activeProjectId}
-              >
-                Create session
-              </Button>
-            </div>
+      const panelLabel = PANEL_LABELS[panel.kind];
 
-            <Tabs value={sessionFilter} onValueChange={(value) => setSessionFilter(value as SessionFilter)}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="all">All sessions</TabsTrigger>
-                <TabsTrigger value="active">Running only</TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            <ScrollArea className="min-h-0 flex-1 rounded-xl border border-border/60 bg-background/60">
-              <div className="space-y-3 p-3">
-                {!sidebarProjects.length ? <p className="text-sm text-muted-foreground">No projects yet.</p> : null}
-
-                {sidebarProjects.map((project) => {
-                  const isActiveProject = project.id === activeProjectId;
-
-                  return (
-                    <section key={project.id} className="rounded-xl border border-border/60 bg-card/60 shadow-sm">
-                      <div className="flex items-start justify-between gap-3 p-3">
-                        <div className="min-w-0 flex-1">
-                          <button
-                            type="button"
-                            className={cn(
-                              "block max-w-full truncate text-left text-sm font-semibold transition-colors hover:text-primary",
-                              isActiveProject && "text-primary"
-                            )}
-                            onClick={() => setActiveProjectId(project.id)}
-                            title={project.rootPath}
-                          >
-                            {project.name}
-                          </button>
-                          <p className="mt-1 truncate text-xs text-muted-foreground">{project.rootPath}</p>
-                        </div>
-                        <Badge variant="outline">{project.sessions.length}</Badge>
-                      </div>
-
-                      <div className="space-y-1 border-t border-border/60 p-2">
-                        {project.sessions.length ? (
-                          project.sessions.map((session) => {
-                            const isActiveSession = session.id === activeSessionId;
-
-                            return (
-                              <button
-                                data-testid="session-row"
-                                data-session-name={session.name}
-                                data-session-status={session.status}
-                                type="button"
-                                key={session.id}
-                                className={cn(
-                                  "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted/70",
-                                  isActiveSession && "bg-primary/10 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.14)]"
-                                )}
-                                onClick={() => {
-                                  setActiveProjectId(project.id);
-                                  setActiveSessionId(session.id);
-                                }}
-                              >
-                                <span className={cn("size-2 shrink-0 rounded-full", session.status === "running" ? "bg-emerald-500" : "bg-muted-foreground")} />
-                                <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-sm font-medium">{session.name}</span>
-                                  <span className="block truncate text-xs text-muted-foreground">{formatAgentStatus(session.agentStatus)}</span>
-                                </span>
-                                <Badge variant={sessionStatusVariant(session)}>{session.status}</Badge>
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-lg px-3 py-2 text-sm text-muted-foreground">No sessions yet.</div>
-                        )}
-                      </div>
-                    </section>
-                  );
-                })}
-              </div>
-            </ScrollArea>
-          </WorkspaceCard>
-
-          <section className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.35fr)_minmax(0,1fr)]">
-            <div className="grid min-h-0 gap-4 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-              <WorkspaceCard
-                title="File tree"
-                description={activeSession?.workdir ?? "Select a session to load a workspace tree."}
-                contentClassName="min-h-0 p-0"
-                actions={
-                  <Button type="button" variant="ghost" size="icon" onClick={() => void reloadTree()} aria-label="Refresh file tree">
-                    <RefreshCcw className="size-4" />
-                  </Button>
-                }
-              >
-                <div className="h-full min-h-[18rem] lg:min-h-0">
-                  <FileTree
-                    nodes={treeNodes}
-                    selectedFilePath={selectedFilePath}
-                    onOpenFile={(path) => void openFile(path)}
-                    isLoading={treeLoading}
-                  />
-                </div>
-              </WorkspaceCard>
-
-              <WorkspaceCard
-                title="Agent activity"
-                description="Stream logs and inspect runtime state for the active session."
-                contentClassName="flex min-h-0 flex-col"
-              >
-                <Tabs defaultValue="logs" className="flex min-h-0 flex-1 flex-col">
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="logs">Logs</TabsTrigger>
-                    <TabsTrigger value="runtime">Runtime</TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="logs" className="min-h-0 flex-1">
-                    <ScrollArea className="h-full rounded-xl border border-border/60 bg-background/60">
-                      <div className="space-y-2 p-3">
-                        {chatLines.length ? (
-                          chatLines.map((line, index) => (
-                            <div
-                              key={`${line}-${index}`}
-                              className={cn(
-                                "rounded-lg border border-border/60 bg-card/70 px-3 py-2 text-xs leading-relaxed text-foreground/90",
-                                line.startsWith("[status]") && "text-muted-foreground",
-                                line.includes("[stderr]") && "border-red-200 bg-red-50/70 text-red-900"
-                              )}
-                            >
-                              {line}
-                            </div>
-                          ))
-                        ) : (
-                          <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">
-                            No agent logs yet.
-                          </div>
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-
-                  <TabsContent value="runtime" className="min-h-0 flex-1">
-                    <ScrollArea className="h-full rounded-xl border border-border/60 bg-background/60">
-                      <div className="space-y-4 p-4 text-sm">
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Bot className="size-4 text-primary" />
-                            <span className="font-medium">Agent</span>
-                            <Badge variant={agentStatusVariant(activeSession?.agentStatus ?? "stopped")}>{activeSession ? formatAgentStatus(activeSession.agentStatus) : "stopped"}</Badge>
-                          </div>
-                          <p className="text-muted-foreground">{activeSession?.agentRuntime?.message || "Agent details appear when a session is active."}</p>
-                        </div>
-
-                        <Separator />
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Activity className="size-4 text-primary" />
-                            <span className="font-medium">Sandbox</span>
-                            <Badge variant="outline">{activeSession?.sandboxRuntime?.mode ?? activeProject?.sandbox.mode ?? "unknown"}</Badge>
-                          </div>
-                          <p className="text-muted-foreground">{activeSession?.workdir ?? "No session selected."}</p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Dependencies</p>
-                          {activeSession?.sandboxRuntime?.dependencies.missing.length ? (
-                            <div className="space-y-2">
-                              {activeSession.sandboxRuntime.dependencies.missing.map((dependency) => (
-                                <Badge key={dependency} variant="warning" className="mr-2">{dependency}</Badge>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-muted-foreground">No missing sandbox dependencies reported.</p>
-                          )}
-                        </div>
-                      </div>
-                    </ScrollArea>
-                  </TabsContent>
-                </Tabs>
-              </WorkspaceCard>
-            </div>
-
-            <div className="grid min-h-0 gap-4 lg:grid-rows-[auto_minmax(0,1fr)_280px]">
-              <WorkspaceCard title="Session controls" description="Start, stop, and monitor the current workspace session.">
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span data-testid="active-session-label" className="text-lg font-semibold tracking-tight">
-                      Session: {activeSession?.name ?? "none"}
-                    </span>
-                    {activeProject ? <Badge variant="outline">{activeProject.name}</Badge> : null}
-                    {activeSession ? <Badge variant={sessionStatusVariant(activeSession)}>{activeSession.status}</Badge> : null}
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <Button data-testid="start-session-button" type="button" onClick={() => void startSession()} disabled={busyAction || !activeSessionId}>
-                      <Play className="mr-2 size-4" />
-                      Start
-                    </Button>
-                    <Button
-                      data-testid="stop-session-button"
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void stopSession()}
-                      disabled={busyAction || !activeSessionId}
-                    >
-                      <Square className="mr-2 size-4" />
-                      Stop
-                    </Button>
-                    <Button
-                      data-testid="quick-new-session-button"
-                      type="button"
-                      variant="outline"
-                      onClick={() => void createSession()}
-                      disabled={busyAction || !activeProjectId}
-                    >
-                      Create next
-                    </Button>
-                  </div>
-
-                  <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-3">
-                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em]">Runtime</p>
-                      <p className="mt-2">{boot?.runtimeTarget ?? "unknown"}</p>
-                    </div>
-                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em]">Docker</p>
-                      <p className="mt-2">{boot?.docker.available ? "Available" : "Unavailable"}</p>
-                    </div>
-                    <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.2em]">Workspace</p>
-                      <p className="mt-2 truncate">{activeSession?.workdir ?? boot?.workspaceRoot ?? "n/a"}</p>
-                    </div>
-                  </div>
-                </div>
-              </WorkspaceCard>
-
-              <WorkspaceCard
-                title="Editor"
-                description={selectedFilePath ?? "Pick a file from the tree to start editing."}
-                contentClassName="flex min-h-0 flex-col p-0"
-                actions={
+      switch (panel.kind) {
+        case "agent":
+          return (
+            <PanelShell
+              title="Agent"
+              subtitle={activeAgentUrl ?? "OpenCode chat surface"}
+              className="h-full min-h-0"
+              actions={
+                <>
+                  {renderDragHandle(panelLabel)}
+                  {renderClosePanelButton(panel, panelLabel)}
+                </>
+              }
+            >
+              <AgentPanel session={activeSession} chatUrl={activeAgentUrl} />
+            </PanelShell>
+          );
+        case "files":
+          return (
+            <PanelShell
+              title="Files"
+              subtitle={toRelativePathLabel(activeSession.workdir, activeSession.workdir)}
+              className="h-full min-h-0"
+              actions={
+                <>
+                  {renderDragHandle(panelLabel)}
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={() => void saveFile()}
-                    disabled={!selectedFilePath || busyAction}
+                    className="size-7 rounded-none"
+                    onClick={() => void reloadTree()}
+                    aria-label="Refresh file tree"
+                  >
+                    <RefreshCcw className="size-4" />
+                  </Button>
+                  {renderClosePanelButton(panel, panelLabel)}
+                </>
+              }
+            >
+              <FileTree
+                nodes={treeNodes}
+                selectedFilePath={activeSelectedFilePath}
+                onOpenFile={(filePath) => void openFile(filePath)}
+                isLoading={treeLoading}
+              />
+            </PanelShell>
+          );
+        case "editor": {
+          const editorFilePath = panel.filePath;
+          const editorBuffer = editorFilePath ? editorStateBySession[activeSession.id]?.buffers[editorFilePath] ?? null : null;
+          const isFocusedEditor = panel.id === activeFocusedPanelId;
+          return (
+            <PanelShell
+              title={editorFilePath ? fileLabel(editorFilePath) : "Editor"}
+              subtitle={editorFilePath ? toRelativePathLabel(activeSession.workdir, editorFilePath) : "Open files from the Files panel."}
+              className="h-full min-h-0"
+              actions={
+                <>
+                  {renderDragHandle(panelLabel)}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 rounded-none"
+                    onClick={() => editorFilePath && void saveEditorFile(editorFilePath)}
+                    disabled={!editorFilePath || busyAction}
                     aria-label="Save file"
                   >
                     <Save className="size-4" />
                   </Button>
-                }
-              >
-                <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-3 text-sm">
-                  <span className="truncate text-muted-foreground">{selectedFilePath ?? "No file selected"}</span>
-                  {selectedFilePath ? <Badge variant={editorDirty ? "warning" : "outline"}>{editorDirty ? "unsaved" : "saved"}</Badge> : null}
+                  {renderClosePanelButton(panel, panelLabel)}
+                </>
+              }
+            >
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+                  <span {...(isFocusedEditor ? { "data-testid": "editor-active-path" } : {})} className="truncate">
+                    {editorFilePath ? toRelativePathLabel(activeSession.workdir, editorFilePath) : "Open a file from the Files panel."}
+                  </span>
+                  {editorFilePath ? (
+                    <Badge variant={editorBuffer?.dirty ? "warning" : "outline"} className="rounded-none px-2 py-0">
+                      {editorBuffer?.dirty ? "unsaved" : "saved"}
+                    </Badge>
+                  ) : null}
                 </div>
-                <div className="min-h-0 flex-1 bg-background/50 p-3">
-                  <div className="h-full overflow-hidden rounded-xl border border-border/60 bg-card/70">
-                    <EditorPanel
-                      filePath={selectedFilePath}
-                      value={editorValue}
-                      onChange={(value) => {
-                        setEditorValue(value);
-                        setEditorDirty(true);
-                      }}
-                    />
-                  </div>
-                </div>
-              </WorkspaceCard>
 
-              <WorkspaceCard title="Terminal" description="Interactive shell bound to the active session." contentClassName="min-h-0 p-3 pt-0">
-                <div className="h-full min-h-[16rem] overflow-hidden rounded-xl border border-border/60 bg-[#f8f4ea]">
-                  <TerminalPanel session={activeSession} />
-                </div>
-              </WorkspaceCard>
-            </div>
+                <div className="min-h-0 flex-1 overflow-hidden">
+                  <EditorPanel
+                    filePath={editorFilePath}
+                    value={editorBuffer?.value ?? ""}
+                    onChange={(value) => {
+                      if (!editorFilePath) {
+                        return;
+                      }
 
-            <div className="grid min-h-0 gap-4 lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-              <WorkspaceCard
-                title="Git"
-                description="Track branch state, review changes, and prepare commits."
-                contentClassName="flex min-h-0 flex-col"
-                actions={
+                      setSessionEditorState(activeSession.id, (current) => ({
+                        ...current,
+                        buffers: {
+                          ...current.buffers,
+                          [editorFilePath]: {
+                            value,
+                            dirty: true
+                          }
+                        }
+                      }));
+                    }}
+                  />
+                </div>
+              </div>
+            </PanelShell>
+          );
+        }
+        case "terminal":
+          return (
+            <PanelShell
+              title="Terminal"
+              subtitle={activeSession.name}
+              className="h-full min-h-0"
+              actions={
+                <>
+                  {renderDragHandle(panelLabel)}
+                  {renderClosePanelButton(panel, panelLabel)}
+                </>
+              }
+            >
+              <div className="h-full min-h-0 bg-[#f8f4ea]">
+                <TerminalPanel session={activeSession} />
+              </div>
+            </PanelShell>
+          );
+        case "git":
+          return (
+            <PanelShell
+              title="Git"
+              subtitle="Track branch state and working tree changes."
+              className="h-full min-h-0"
+              actions={
+                <>
+                  {renderDragHandle(panelLabel)}
                   <Button
                     data-testid="refresh-git-button"
                     type="button"
                     variant="ghost"
                     size="icon"
+                    className="size-7 rounded-none"
                     onClick={() => void refreshGitStatus()}
                     aria-label="Refresh git status"
                   >
                     <RefreshCcw className="size-4" />
                   </Button>
-                }
-              >
-                {!activeSession ? (
-                  <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">No session selected.</div>
-                ) : !gitStatus ? (
-                  <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">Loading git status...</div>
+                  {renderClosePanelButton(panel, panelLabel)}
+                </>
+              }
+            >
+              <div className="flex h-full min-h-0 flex-col">
+                {!gitStatus ? (
+                  <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-6 text-sm text-muted-foreground">
+                    Loading git status...
+                  </div>
                 ) : !gitStatus.isRepo ? (
-                  <div className="rounded-xl border border-dashed border-border/70 px-4 py-6 text-sm text-muted-foreground">Workspace is not a git repository.</div>
+                  <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-6 text-sm text-muted-foreground">
+                    Workspace is not a git repository.
+                  </div>
                 ) : (
                   <>
-                    <div className="flex flex-wrap items-center gap-2 pb-4">
-                      <Badge variant="outline">
+                    <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-3">
+                      <Badge variant="outline" className="rounded-none px-2 py-0">
                         <GitBranch className="mr-1 size-3.5" />
                         {gitStatus.branch ?? "detached"}
                       </Badge>
-                      <Badge variant="secondary">+{gitStatus.ahead} / -{gitStatus.behind}</Badge>
-                      {selectedGitEntry ? <Badge variant={selectedGitEntry.staged ? "success" : selectedGitEntry.untracked ? "warning" : "outline"}>{selectedGitEntry.displayStatus}</Badge> : null}
+                      <Badge variant="secondary" className="rounded-none px-2 py-0">
+                        +{gitStatus.ahead} / -{gitStatus.behind}
+                      </Badge>
+                      {selectedGitEntry ? (
+                        <Badge
+                          variant={selectedGitEntry.staged ? "success" : selectedGitEntry.untracked ? "warning" : "outline"}
+                          className="rounded-none px-2 py-0"
+                        >
+                          {selectedGitEntry.displayStatus}
+                        </Badge>
+                      ) : null}
                     </div>
 
-                    <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border/60 bg-background/60 p-3">
-                      <div className="space-y-2">
-                        {gitStatus.files.length ? (
-                          gitStatus.files.map((entry, index) => (
-                            <button
-                              data-testid="git-file-row"
-                              data-git-path={entry.path}
-                              type="button"
-                              key={`${entry.path}-${index}`}
-                              onClick={() => setSelectedGitPath(entry.path)}
-                              className={cn(
-                                "flex w-full items-center gap-3 rounded-lg border border-border/50 bg-card/70 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/70",
-                                selectedGitPath === entry.path && "bg-primary/10 shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.14)]",
-                                gitEntryClass(entry)
-                              )}
-                            >
-                              <Badge variant={entry.staged ? "success" : entry.untracked ? "warning" : "outline"} className="shrink-0">
-                                {entry.displayStatus}
-                              </Badge>
-                              <span className="truncate">{entry.path}</span>
-                            </button>
-                          ))
-                        ) : (
-                          <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-sm text-muted-foreground">Working tree clean.</div>
-                        )}
-                      </div>
+                    <div className="min-h-0 flex-1 overflow-auto">
+                      {gitStatus.files.length ? (
+                        gitStatus.files.map((entry, index) => (
+                          <button
+                            data-testid="git-file-row"
+                            data-git-path={entry.path}
+                            type="button"
+                            key={`${entry.path}-${index}`}
+                            onClick={() => setSelectedGitPath(entry.path)}
+                            className={cn(
+                              "flex w-full items-center gap-3 border-b border-border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
+                              selectedGitPath === entry.path && "bg-muted/50",
+                              gitEntryClass(entry)
+                            )}
+                          >
+                            <Badge variant={entry.staged ? "success" : entry.untracked ? "warning" : "outline"} className="shrink-0 rounded-none px-2 py-0">
+                              {entry.displayStatus}
+                            </Badge>
+                            <span className="truncate">{entry.path}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-4 text-sm text-muted-foreground">Working tree clean.</div>
+                      )}
                     </div>
 
-                    <div className="pt-4 text-xs text-muted-foreground">Latest commit: {gitStatus.latestCommit ?? "no commits yet"}</div>
-                    <div className="grid gap-2 pt-4 sm:grid-cols-3">
+                    <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                      Latest commit: {gitStatus.latestCommit ?? "no commits yet"}
+                    </div>
+                    <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
                       <Button
                         data-testid="git-stage-button"
                         type="button"
                         variant="secondary"
+                        className="rounded-none bg-secondary"
                         onClick={() => void stageGitSelection()}
-                        disabled={gitBusyAction !== null || !activeSession || !gitStatus.files.length}
+                        disabled={gitBusyAction !== null || !gitStatus.files.length}
                       >
                         Stage
                       </Button>
@@ -1055,6 +1204,7 @@ export default function App() {
                         data-testid="git-discard-button"
                         type="button"
                         variant="outline"
+                        className="rounded-none border-0 bg-background"
                         onClick={() => void discardGitSelection()}
                         disabled={gitBusyAction !== null || !selectedGitEntry}
                       >
@@ -1063,8 +1213,9 @@ export default function App() {
                       <Button
                         data-testid="git-commit-button"
                         type="button"
+                        className="rounded-none"
                         onClick={openCommitDialog}
-                        disabled={gitBusyAction !== null || !activeSession || !gitStatus.isRepo || !hasStagedChanges}
+                        disabled={gitBusyAction !== null || !gitStatus.isRepo || !hasStagedChanges}
                       >
                         <GitCommitHorizontal className="mr-2 size-4" />
                         Commit
@@ -1072,67 +1223,533 @@ export default function App() {
                     </div>
                   </>
                 )}
-              </WorkspaceCard>
+              </div>
+            </PanelShell>
+          );
+        case "browser":
+          return (
+            <PanelShell
+              title="Browser"
+              subtitle="Open a local or remote target in-session."
+              className="h-full min-h-0"
+              actions={
+                <>
+                  {renderDragHandle(panelLabel)}
+                  {renderClosePanelButton(panel, panelLabel)}
+                </>
+              }
+            >
+              <div className="flex h-full min-h-0 flex-col">
+                <form className="flex gap-px border-b border-border p-2" onSubmit={openWebView}>
+                  <Input
+                    data-testid="web-url-input"
+                    value={webDraftUrl}
+                    onChange={(event) => setWebDraftUrl(event.target.value)}
+                    placeholder={DEFAULT_BROWSER_URL}
+                    className="rounded-none"
+                  />
+                  <Button data-testid="web-open-button" type="submit" className="rounded-none">
+                    <Globe className="mr-2 size-4" />
+                    Open
+                  </Button>
+                </form>
 
-              <WorkspaceCard title="Web preview" description="Open local or remote targets inside the workspace.">
-                <div className="flex h-full min-h-0 flex-col gap-3">
-                  <form className="flex gap-2" onSubmit={openWebView}>
-                    <Input
-                      data-testid="web-url-input"
-                      value={webDraftUrl}
-                      onChange={(event) => setWebDraftUrl(event.target.value)}
-                      placeholder="http://localhost:3000"
-                    />
-                    <Button data-testid="web-open-button" type="submit">
-                      <Globe className="mr-2 size-4" />
-                      Open
-                    </Button>
-                  </form>
-
-                  <div className="flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => setWebDraftUrl("http://localhost:3000")}>localhost:3000</Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => setWebDraftUrl("http://127.0.0.1:43111/api/health")}>health</Button>
-                  </div>
-
-                  <div data-testid="web-status" className="text-sm text-muted-foreground">status: {webState}</div>
-
-                  {webUrl === "about:blank" ? (
-                    <div className="flex min-h-[16rem] flex-1 items-center justify-center rounded-xl border border-dashed border-border/70 bg-background/60 px-4 text-sm text-muted-foreground">
-                      Enter a URL to load a preview.
-                    </div>
-                  ) : (
-                    <div className="min-h-[18rem] flex-1 overflow-hidden rounded-xl border border-border/60 bg-white shadow-inner">
-                      <iframe
-                        data-testid="web-iframe"
-                        src={webUrl}
-                        title="Live web view"
-                        className="h-full w-full border-0 bg-white"
-                        onLoad={() => setWebState("loaded")}
-                        onError={() => setWebState("error")}
-                      />
-                    </div>
-                  )}
+                <div className="flex flex-wrap gap-px border-b border-border p-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="rounded-none"
+                    onClick={() => {
+                      setWebDraftUrl(DEFAULT_BROWSER_URL);
+                      setWebUrl(DEFAULT_BROWSER_URL);
+                      setWebState("loading");
+                    }}
+                  >
+                    localhost:3000
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="rounded-none"
+                    onClick={() => {
+                      const healthUrl = "http://127.0.0.1:43111/api/health";
+                      setWebDraftUrl(healthUrl);
+                      setWebUrl(healthUrl);
+                      setWebState("loading");
+                    }}
+                  >
+                    health
+                  </Button>
                 </div>
-              </WorkspaceCard>
-            </div>
-          </section>
+
+                <div data-testid="web-status" className="border-b border-border px-3 py-2 text-sm text-muted-foreground">
+                  status: {webState}
+                </div>
+
+                {webUrl === "about:blank" ? (
+                  <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
+                    Enter a URL to load a preview.
+                  </div>
+                ) : (
+                  <div className="min-h-0 flex-1 overflow-hidden bg-white">
+                    <iframe
+                      data-testid="web-iframe"
+                      src={webUrl}
+                      title="Live web view"
+                      className="h-full w-full border-0 bg-white"
+                      onLoad={() => setWebState("loaded")}
+                      onError={() => setWebState("error")}
+                    />
+                  </div>
+                )}
+              </div>
+            </PanelShell>
+          );
+      }
+    },
+    [
+      activeAgentUrl,
+      activeFocusedPanelId,
+      activeSelectedFilePath,
+      activeSession,
+      busyAction,
+      discardGitSelection,
+      editorStateBySession,
+      gitBusyAction,
+      gitStatus,
+      hasStagedChanges,
+      openCommitDialog,
+      openFile,
+      refreshGitStatus,
+      reloadTree,
+      renderClosePanelButton,
+      renderDragHandle,
+      saveEditorFile,
+      selectedGitEntry,
+      selectedGitPath,
+      setSessionEditorState,
+      stageGitSelection,
+      treeLoading,
+      treeNodes,
+      webDraftUrl,
+      webState,
+      webUrl
+    ]
+  );
+
+  if (!window.bigIDE) {
+    return (
+      <main className="flex h-full items-center justify-center bg-background p-6">
+        <div className="w-full max-w-lg border border-border bg-background">
+          <div className="border-b border-border px-4 py-3">
+            <h1 className="text-base font-semibold">Backend unavailable</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Use `npm run dev` or `npm run dev:web` to connect the workspace runtime.</p>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const sessionCreationProject = projects.find((project) => project.id === sessionCreationProjectId) ?? null;
+
+  return (
+    <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground md:flex-row">
+      <aside className="flex min-h-0 w-full flex-col border-b border-border bg-card md:w-[20rem] md:min-w-[20rem] md:border-b-0 md:border-r">
+        <div className="border-b border-border px-4 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <h1 data-testid="workspace-app-title" className="truncate text-lg font-semibold tracking-tight">
+              The Big IDE
+            </h1>
+            <Button
+              data-testid="new-project-button"
+              type="button"
+              size="sm"
+              variant="outline"
+              className="shrink-0 rounded-none px-2.5"
+              onClick={openProjectDialog}
+            >
+              [+ New Project]
+            </Button>
+          </div>
+          {errorMessage ? (
+            <p role="alert" className="mt-2 text-sm text-destructive">
+              {errorMessage}
+            </p>
+          ) : null}
         </div>
 
-        <Card className="border-border/70 bg-background/80 shadow-sm">
-          <CardContent className="flex flex-col gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <TerminalSquare className="size-4" />
-              <span>{boot?.workspaceRoot ?? "workspace unavailable"}</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Badge variant="outline">Ctrl/Cmd+S save</Badge>
-              <Badge variant="outline">Ctrl/Cmd+Shift+N new session</Badge>
-              <Badge variant="outline">Ctrl/Cmd+Tab cycle</Badge>
-            </div>
-            <div className={cn("text-sm", errorMessage ? "text-red-700" : "text-muted-foreground")}>{errorMessage || infoMessage}</div>
-          </CardContent>
-        </Card>
-      </div>
+        <nav aria-label="Projects and sessions" className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+          {!projects.length ? <p className="px-1 text-sm text-muted-foreground">No projects yet.</p> : null}
+
+          <ul className="space-y-1.5">
+            {projects.map((project) => {
+              const isActiveProject = project.id === activeProjectId;
+              const isExpanded = expandedProjects[project.id] ?? isActiveProject;
+
+              return (
+                <li key={project.id} className="border-b border-border/80 pb-1 last:border-b-0">
+                  <div className={cn("flex items-center gap-1 px-1 py-1", isActiveProject && "bg-muted/40")}>
+                    <button
+                      type="button"
+                      className="inline-flex size-7 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:text-foreground"
+                      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${project.name}`}
+                      aria-expanded={isExpanded}
+                      onClick={() => {
+                        setExpandedProjects((previous) => ({
+                          ...previous,
+                          [project.id]: !isExpanded
+                        }));
+                      }}
+                    >
+                      {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                    </button>
+                    <button
+                      type="button"
+                      aria-current={isActiveProject ? "page" : undefined}
+                      className={cn(
+                        "min-w-0 flex-1 truncate text-left text-sm font-medium transition-colors hover:text-primary",
+                        isActiveProject && "text-primary"
+                      )}
+                      onClick={() => {
+                        setExpandedProjects((previous) => ({
+                          ...previous,
+                          [project.id]: true
+                        }));
+                        setActiveProjectId(project.id);
+                        setActiveSessionId(project.id === activeProjectId ? activeSessionId : project.sessions[0]?.id ?? null);
+                      }}
+                    >
+                      {project.name}
+                    </button>
+                    <Badge variant="outline" className="rounded-none px-1.5 py-0 text-[10px] uppercase tracking-[0.12em]">
+                      {project.sessions.length}
+                    </Badge>
+                    <Button
+                      data-testid="new-session-button"
+                      data-project-name={project.name}
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 rounded-none px-2 text-[11px]"
+                      onClick={() => openSessionDialog(project.id)}
+                    >
+                      + Session
+                    </Button>
+                  </div>
+
+                  {isExpanded ? (
+                    project.sessions.length ? (
+                      <div className="ml-4 border-l border-border/80 pl-2">
+                        {project.sessions.map((session) => {
+                          const isActiveSession = session.id === activeSessionId;
+
+                          return (
+                            <button
+                              data-testid="session-row"
+                              data-session-name={session.name}
+                              data-session-status={session.status}
+                              type="button"
+                              key={session.id}
+                              className={cn(
+                                "mt-1 flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-muted/50",
+                                isActiveSession && "bg-muted/50"
+                              )}
+                              onClick={() => {
+                                setExpandedProjects((previous) => ({
+                                  ...previous,
+                                  [project.id]: true
+                                }));
+                                setActiveProjectId(project.id);
+                                setActiveSessionId(session.id);
+                              }}
+                            >
+                              <span className={cn("size-1.5 shrink-0 rounded-full", session.status === "running" ? "bg-emerald-500" : "bg-muted-foreground")} />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-medium">{session.name}</span>
+                                <span className="block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                                  {session.status} - {formatAgentStatus(session.agentStatus)}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="ml-4 border-l border-border/80 px-2 py-2 text-xs text-muted-foreground">No sessions yet.</div>
+                    )
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+
+        <div className={cn("border-t border-border px-4 py-3 text-xs", errorMessage ? "text-destructive" : "text-muted-foreground")}>
+          {errorMessage || infoMessage || boot?.workspaceRoot || "Workspace ready"}
+        </div>
+      </aside>
+
+      <section className="min-h-0 flex-1 overflow-hidden">
+        <div data-testid="session-panel-area" className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+          {!activeSession ? (
+            <>
+              <div className="border-b border-border px-4 py-4">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-muted-foreground">Session workspace</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {activeProject
+                    ? "Select a session or create one from the project card to open its panels."
+                    : "Create a project first, then add a session from its project card."}
+                </p>
+              </div>
+              <div
+                data-testid="session-panel-empty-state"
+                className="flex min-h-0 flex-1 items-center justify-center px-6 py-10 text-center"
+              >
+                <div className="max-w-md space-y-3">
+                  <p className="text-lg font-semibold tracking-tight text-foreground">No session selected</p>
+                  <p className="text-sm text-muted-foreground">
+                    {activeProject
+                      ? "Use the + Session button inside the active project card or choose an existing session to open its panel rail."
+                      : "Start by creating a project, then add a session to view its workspace panels."}
+                  </p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="border-b border-border px-4 py-4">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0 space-y-3">
+                    <div>
+                      <span data-testid="active-session-label" className="block text-lg font-semibold tracking-tight">
+                        Session: {activeSession.name}
+                      </span>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline" className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                          {activeProject?.name}
+                        </Badge>
+                        <Badge variant={sessionStatusVariant(activeSession)} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                          {activeSession.status}
+                        </Badge>
+                        <Badge variant={agentStatusVariant(activeSession.agentStatus)} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                          OpenCode {formatAgentStatus(activeSession.agentStatus)}
+                        </Badge>
+                        <Badge variant="outline" className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]" data-testid="session-sandbox-mode">
+                          sandbox {activeSandboxMode}
+                        </Badge>
+                        <Badge variant={boot?.docker.available ? "success" : "warning"} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                          {boot?.docker.available ? "docker ready" : "docker unavailable"}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    <div data-testid="session-runtime-context" className="grid gap-1 text-xs text-muted-foreground">
+                      <span>workspace {toRelativePathLabel(activeSession.workdir, activeSession.workdir)}</span>
+                      <span>
+                        {boot?.runtimeTarget ?? "unknown"} runtime - {activeSession.agentRuntime?.message || "OpenCode not started"}
+                      </span>
+                      {activeAgentUrl ? (
+                        <span data-testid="session-agent-url" className="truncate">
+                          {activeAgentUrl}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      data-testid="start-session-button"
+                      type="button"
+                      size="sm"
+                      className="rounded-none px-3"
+                      onClick={() => void startSession()}
+                      disabled={busyAction}
+                    >
+                      <Play className="mr-1.5 size-3.5" />
+                      Start
+                    </Button>
+                    <Button
+                      data-testid="stop-session-button"
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      className="rounded-none px-3"
+                      onClick={() => void stopSession()}
+                      disabled={busyAction}
+                    >
+                      <Square className="mr-1.5 size-3.5" />
+                      Stop
+                    </Button>
+                    <Button
+                      data-testid="new-panel-button"
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="rounded-none px-3"
+                      onClick={() => setIsPanelDialogOpen(true)}
+                    >
+                      [+ New Panel]
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
+                {activePanels.length ? (
+                  <div data-testid="session-panel-scroll-region" className="h-full min-h-0 overflow-auto overscroll-contain">
+                    <div
+                      data-testid="session-panel-rail"
+                      className="flex min-h-full w-max min-w-full flex-nowrap items-stretch gap-3 pb-2 pr-3"
+                    >
+                      {activePanels.map((panel) => (
+                      <div
+                        data-testid="session-panel"
+                        data-panel-id={panel.kind}
+                        data-file-path={panel.filePath ?? undefined}
+                        key={panel.id}
+                        ref={(node) => {
+                          panelRefs.current[panel.id] = node;
+                        }}
+                        draggable
+                        onClick={() => focusPanel(activeSession.id, panel.id)}
+                        onDragStart={() => {
+                          setDraggedPanelId(panel.id);
+                          focusPanel(activeSession.id, panel.id);
+                        }}
+                        onDragOver={(event) => {
+                          if (!draggedPanelId || draggedPanelId === panel.id) {
+                            return;
+                          }
+
+                          event.preventDefault();
+                        }}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          if (!draggedPanelId || draggedPanelId === panel.id) {
+                            return;
+                          }
+
+                          moveSessionPanel(activeSession.id, draggedPanelId, panel.id);
+                          setDraggedPanelId(null);
+                        }}
+                        onDragEnd={() => setDraggedPanelId(null)}
+                        className={cn(
+                          "h-full min-h-0 w-[22rem] shrink-0 sm:w-[24rem] lg:w-[28rem] xl:w-[30rem]",
+                          panel.id === activeFocusedPanelId && "ring-2 ring-primary/25 ring-offset-2 ring-offset-background",
+                          draggedPanelId === panel.id && "opacity-70"
+                        )}
+                      >
+                        {renderPanel(panel)}
+                      </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex h-full min-h-0 items-center justify-center border border-dashed border-border px-6 text-center">
+                    <div className="max-w-sm space-y-3">
+                      <p className="text-base font-semibold">No panels open</p>
+                      <p className="text-sm text-muted-foreground">Use `[+ New Panel]` to add Agent, Files, Terminal, Git, or Browser panels. Editor panels open from Files.</p>
+                      <Button type="button" size="sm" variant="outline" className="rounded-none" onClick={() => setIsPanelDialogOpen(true)}>
+                        [+ New Panel]
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </section>
+
+      <Dialog open={isProjectDialogOpen} onOpenChange={setIsProjectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create project</DialogTitle>
+            <DialogDescription>Add a project to the workspace. New sessions can then be created from the project card.</DialogDescription>
+          </DialogHeader>
+
+          <form className="grid gap-4" onSubmit={createProject}>
+            <Input
+              data-testid="project-name-input"
+              value={newProjectName}
+              onChange={(event) => setNewProjectName(event.target.value)}
+              placeholder="New project"
+              className="rounded-none"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" className="rounded-none" onClick={() => setIsProjectDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button data-testid="create-project-button" type="submit" className="rounded-none" disabled={busyAction || !newProjectName.trim()}>
+                Create project
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isSessionDialogOpen} onOpenChange={setIsSessionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create session</DialogTitle>
+            <DialogDescription>
+              {sessionCreationProject ? `Create a new session inside ${sessionCreationProject.name}.` : "Choose a project first."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="grid gap-4" onSubmit={createSession}>
+            <Input
+              data-testid="session-name-input"
+              value={newSessionName}
+              onChange={(event) => setNewSessionName(event.target.value)}
+              placeholder="backend-debug"
+              className="rounded-none"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button type="button" variant="outline" className="rounded-none" onClick={() => setIsSessionDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                data-testid="create-session-button"
+                type="submit"
+                variant="secondary"
+                className="rounded-none"
+                disabled={busyAction || !sessionCreationProjectId}
+              >
+                Create session
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isPanelDialogOpen} onOpenChange={setIsPanelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add panel</DialogTitle>
+            <DialogDescription>Create another panel in the current session. Editor panels open from Files when you open a file.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-2">
+            {NEW_PANEL_OPTIONS.map((option) => (
+              <button
+                key={option.kind}
+                data-testid={`new-panel-option-${option.kind}`}
+                type="button"
+                className="grid gap-1 border border-border px-3 py-3 text-left transition-colors hover:bg-muted/30"
+                onClick={() => addPanelToActiveSession(option.kind)}
+              >
+                <span className="text-sm font-semibold">{option.label}</span>
+                <span className="text-xs text-muted-foreground">{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isCommitDialogOpen} onOpenChange={setIsCommitDialogOpen}>
         <DialogContent>
@@ -1148,12 +1765,12 @@ export default function App() {
               void commitGitChanges();
             }}
           >
-            <Input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="chore: update session state" />
+            <Input value={commitMessage} onChange={(event) => setCommitMessage(event.target.value)} placeholder="chore: update session state" className="rounded-none" />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsCommitDialogOpen(false)}>
+              <Button type="button" variant="outline" className="rounded-none" onClick={() => setIsCommitDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={gitBusyAction === "commit" || !commitMessage.trim()}>
+              <Button type="submit" className="rounded-none" disabled={gitBusyAction === "commit" || !commitMessage.trim()}>
                 Create commit
               </Button>
             </DialogFooter>

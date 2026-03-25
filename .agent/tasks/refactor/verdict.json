@@ -1,0 +1,88 @@
+{
+  "task_id": "refactor",
+  "overall_verdict": "PASS",
+  "criteria": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` renders the sidebar header from `activeProject?.name` with a neutral fallback and no longer shows the old stacked Projects/Workspace/runtime labels."
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` uses a compact `new-project-button` that opens a dialog, and `createProject` still submits through `window.bigIDE.projects.create`; the fresh Playwright run passed this flow."
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` moves session creation into each project item via `new-session-button`, targets the selected project id, and the fresh Playwright run passed session creation plus Start/Stop lifecycle actions."
+    },
+    {
+      "id": "AC4",
+      "status": "PASS",
+      "reason": "Current `server/web-backend.js` and `electron/main.js` initialize persisted state with `projects: []`, and `src/App.tsx` no longer seeds a default project in UI state; this was verified by code inspection rather than resetting persisted local state during verification."
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` uses neutral `Workspace ready` copy, and a fresh repository search found `Web runtime ready` only in task artifacts, not in production UI/runtime sources."
+    },
+    {
+      "id": "AC6",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` removes the old padded `main > section` wrapper and uses a single workspace shell with a horizontal rail container; the separator cleanup is supported by code inspection and the fresh build/e2e run produced no regressions."
+    },
+    {
+      "id": "AC7",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` places compact badges beneath the session title and renders smaller Start/Stop controls while preserving the same actions; the fresh Playwright run passed lifecycle interactions."
+    },
+    {
+      "id": "AC8",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` replaces the old panel strip with `[+ New Panel]` and a modal chooser, and a fresh search found no old panel-toggle markers in production source."
+    },
+    {
+      "id": "AC9",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` stores panel instances as per-session arrays and renders per-panel close buttons; the fresh Playwright run confirmed closing/reopening Agent and opening duplicate Files panels."
+    },
+    {
+      "id": "AC10",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` keeps the rail `flex-nowrap` with `overflow-x-auto`, marks each panel wrapper `draggable`, and reorders panels through `moveSessionPanel`; reorder behavior was verified by code inspection, while horizontal scrolling was also covered by the fresh Playwright run."
+    },
+    {
+      "id": "AC11",
+      "status": "PASS",
+      "reason": "Current `src/App.tsx` binds each editor panel to a single `panel.filePath` with no editor tab strip, and the fresh Playwright run asserted `editor-tabs` are absent."
+    },
+    {
+      "id": "AC12",
+      "status": "PASS",
+      "reason": "Current `openFile` logic in `src/App.tsx` focuses an already-open editor for the same file and only appends a new editor panel for a different file; the fresh Playwright run passed this behavior."
+    },
+    {
+      "id": "AC13",
+      "status": "PASS",
+      "reason": "Current `src/components/file-tree.tsx` defaults directories to collapsed and toggles expansion explicitly, and the fresh Playwright run confirmed nested files stay hidden until their directories are opened."
+    }
+  ],
+  "commands_run": [
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:e2e -- --grep \"usage recordings\"",
+    "rg -n \"Web runtime ready\" src server electron e2e .agent/tasks/refactor",
+    "rg -n \"panel-toggle-|Agent pinned|editor-tabs|editor-tab\" src e2e/usage-recordings.spec.ts"
+  ],
+  "artifacts_used": [
+    ".agent/tasks/refactor/spec.md",
+    ".agent/tasks/refactor/evidence.md",
+    ".agent/tasks/refactor/evidence.json",
+    "src/App.tsx",
+    "src/components/file-tree.tsx",
+    "e2e/usage-recordings.spec.ts",
+    "server/web-backend.js",
+    "electron/main.js"
+  ]
+}

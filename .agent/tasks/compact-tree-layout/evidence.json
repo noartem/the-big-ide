@@ -1,0 +1,112 @@
+{
+  "task_id": "compact-tree-layout",
+  "overall_status": "PASS",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "Overflow from the session panel area is contained inside the panel block instead of making the overall page/workspace shell scroll. The page layout remains height-constrained, while the panel rail and panel contents use internal scrolling where needed.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1494 keeps the workspace section overflow-hidden.",
+        "src/App.tsx:1601 adds data-testid=\"session-panel-scroll-region\" with overflow-auto overscroll-contain.",
+        "e2e/usage-recordings.spec.ts:108 asserts the panel scroll region uses overflow-x auto.",
+        "Command artifacts PASS: .agent/tasks/compact-tree-layout/raw/test-unit.txt, .agent/tasks/compact-tree-layout/raw/build.txt, .agent/tasks/compact-tree-layout/raw/test-integration.txt."
+      ],
+      "gaps": [
+        "Top-level page scroll is inferred from layout code and targeted scroll-region coverage rather than a direct browser scroll-position assertion."
+      ]
+    },
+    {
+      "id": "AC2",
+      "text": "Panel headers stop showing full workspace or folder paths by default. Files panels show a concise project-relative location label, and other panel headers use short labels instead of repeating the full absolute workdir path.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:140 adds toRelativePathLabel(...) for concise relative path labels.",
+        "src/App.tsx:1000, src/App.tsx:1034, and src/App.tsx:1057 use relative labels in Files and Editor surfaces.",
+        "src/App.tsx:1549 shortens the session runtime workspace label to a relative workspace label.",
+        "e2e/usage-recordings.spec.ts:232 and e2e/usage-recordings.spec.ts:241 verify focused editor paths render as README.md and src/nested/index.ts."
+      ],
+      "gaps": [
+        "Files panel subtitle is verified mainly by code inspection."
+      ]
+    },
+    {
+      "id": "AC3",
+      "text": "Editor panels use the full available panel height for the editor surface, and the editor area scrolls internally without collapsing into a short viewport.",
+      "status": "PASS",
+      "proof": [
+        "src/components/editor-panel.tsx:57 and src/components/editor-panel.tsx:58 make the editor surface flex to full height.",
+        "src/styles.css:57 and src/styles.css:69 ensure the CodeMirror theme/scroller fills height and scrolls internally.",
+        "Command artifacts PASS: .agent/tasks/compact-tree-layout/raw/build.txt and .agent/tasks/compact-tree-layout/raw/test-integration.txt."
+      ],
+      "gaps": [
+        "Full-height editor behavior is primarily code-inspected."
+      ]
+    },
+    {
+      "id": "AC4",
+      "text": "The top-left sidebar header shows only the product title `The Big IDE` and the new-project entry point. It does not show the active project name, filesystem path, or runtime-mode/path text.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1362 renders the static workspace-app-title heading as The Big IDE.",
+        "e2e/usage-recordings.spec.ts:15 asserts the header title text is exactly The Big IDE.",
+        "The old active project/path sidebar header block was removed from src/App.tsx."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC5",
+      "text": "The project/session sidebar becomes more compact and tree-like: projects render as lightweight rows or branches with nested session rows, reduced card chrome, and clearer hierarchy while preserving selection, session creation, and session lifecycle actions.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:194 introduces expandedProjects state for collapsible tree branches.",
+        "src/App.tsx:1389 and src/App.tsx:1450 render lightweight project rows with nested session rows instead of bordered cards.",
+        "Project and session interaction hooks remain on the compact tree rows."
+      ],
+      "gaps": [
+        "The visual compactness/tree styling is confirmed by code inspection rather than screenshot comparison."
+      ]
+    },
+    {
+      "id": "AC6",
+      "text": "The compact sidebar layout keeps the existing project/session flows usable: creating a project still uses the existing modal flow, creating a session still happens from the relevant project item, and active project/session selection remains clear.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1366 preserves new-project-button in the compact header.",
+        "src/App.tsx:1430 preserves new-session-button on each project row.",
+        "src/App.tsx:1450 preserves session-row selection within the nested tree.",
+        "e2e/usage-recordings.spec.ts:17, e2e/usage-recordings.spec.ts:25, and e2e/usage-recordings.spec.ts:129 cover project creation, session creation, and session lifecycle/selection."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC7",
+      "text": "Existing file-opening behavior remains intact after the compact layout changes: opening files from Files still focuses an already-open editor panel for that file, otherwise opens one editor panel per file.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:687, src/App.tsx:696, src/App.tsx:704, and src/App.tsx:718 preserve the focus-or-open editor logic.",
+        "e2e/usage-recordings.spec.ts:230 and e2e/usage-recordings.spec.ts:235 verify duplicate opens do not create extra editor panels.",
+        "e2e/usage-recordings.spec.ts:240 verifies a second file creates a second editor panel."
+      ],
+      "gaps": []
+    }
+  ],
+  "changed_files": [
+    "src/App.tsx",
+    "src/components/editor-panel.tsx",
+    "src/styles.css",
+    "e2e/usage-recordings.spec.ts",
+    ".agent/tasks/compact-tree-layout/spec.md",
+    ".agent/tasks/compact-tree-layout/evidence.md",
+    ".agent/tasks/compact-tree-layout/evidence.json"
+  ],
+  "commands_for_fresh_verifier": [
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:e2e -- --grep \"usage recordings\""
+  ],
+  "known_gaps": [
+    "AC1, AC2, AC3, and AC5 rely partly on code inspection for layout/visual proof.",
+    "Lint was not run for this task; raw/lint.txt records this explicitly."
+  ]
+}

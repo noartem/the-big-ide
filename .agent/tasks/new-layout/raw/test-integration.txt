@@ -1,0 +1,16 @@
+$ npm run test:e2e -- --grep usage recordings
+
+
+> the-big-ide@0.1.5 test:e2e
+> playwright test --grep usage recordings
+
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/usage-recordings.spec.ts:85:3 › usage recordings › session lifecycle from UI (6.8s)
+  ✓  2 [chromium] › e2e/usage-recordings.spec.ts:121:3 › usage recordings › docker sandbox startup path shows agent chat when Docker works (40.0s)
+  ✓  3 [chromium] › e2e/usage-recordings.spec.ts:149:3 › usage recordings › files open editor tabs and git/browser panels stay usable (4.5s)
+
+  3 passed (56.8s)
+
+exit_code=0

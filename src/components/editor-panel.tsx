@@ -54,12 +54,13 @@ export function EditorPanel({ filePath, value, onChange }: EditorPanelProps) {
   }
 
   return (
-    <div className="h-full overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <CodeMirror
         value={value}
         extensions={resolveLanguageExtensions(filePath)}
         height="100%"
         minHeight="100%"
+        className="min-h-0 flex-1"
         onChange={onChange}
         basicSetup={{
           lineNumbers: true,

@@ -1,0 +1,370 @@
+{
+  "task_id": "new-layout",
+  "overall_status": "PASS",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "The app keeps the existing project/session navigation and, when a session is selected, renders a dedicated session workspace area next to the session list instead of showing only the list. If no session is selected, the workspace area shows an explicit empty state.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/App.tsx:1254",
+          "summary": "Selected sessions render inside a dedicated `session-panel-area` next to the sidebar."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1266",
+          "summary": "An explicit empty state is shown when no session is selected."
+        },
+        {
+          "type": "source",
+          "path": "e2e/usage-recordings.spec.ts:85",
+          "summary": "Playwright coverage asserts the workspace area and empty/session-selected states."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"usage recordings\"",
+          "exit_code": 0,
+          "summary": "Targeted usage-recordings tests passed."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC2",
+      "text": "The selected-session workspace adopts a brutalist/minimalist visual treatment for the session area and its panels: no card-within-card presentation, no rounded corners, no decorative shadows, minimal padding, and separation primarily through `border-border`, `divide-y`, and small gaps.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/components/ui/panel-shell.tsx:19",
+          "summary": "Panel shells are flat bordered sections without rounded card styling or shadows."
+        },
+        {
+          "type": "source",
+          "path": "src/styles.css:23",
+          "summary": "Global radius token is set to zero."
+        },
+        {
+          "type": "source",
+          "path": "src/styles.css:64",
+          "summary": "CodeMirror editor rounding is removed."
+        },
+        {
+          "type": "source",
+          "path": "src/styles.css:68",
+          "summary": "xterm viewport rounding is removed."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1345",
+          "summary": "Panel controls use flat borders and tight gaps instead of nested cards."
+        }
+      ],
+      "gaps": [
+        "Brutalist/minimal styling is primarily proven by source review; this refresh did not add a fresh screenshot artifact."
+      ]
+    },
+    {
+      "id": "AC3",
+      "text": "The session header remains the single place for session/runtime status and start-stop controls, including the existing session/OpenCode/Docker context needed to understand launch state; that information is not duplicated inside the Agent panel body.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/App.tsx:1281",
+          "summary": "The session header now contains runtime context, badges, and controls."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1297",
+          "summary": "Sandbox mode and Docker readiness are surfaced in the header."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1320",
+          "summary": "Start and stop controls live in the header."
+        },
+        {
+          "type": "source",
+          "path": "src/components/agent-panel.tsx:17",
+          "summary": "Agent panel fallback states do not duplicate runtime controls."
+        },
+        {
+          "type": "source",
+          "path": "src/components/agent-panel.tsx:49",
+          "summary": "The running-state Agent panel renders only the chat iframe surface."
+        },
+        {
+          "type": "source",
+          "path": "e2e/usage-recordings.spec.ts:121",
+          "summary": "Playwright coverage checks the agent chat surface after startup."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC4",
+      "text": "Open session panels render as a single horizontally scrollable, non-wrapping strip, each open panel fills the available session-area height, and each panel provides its own internal scrolling for overflowing content rather than forcing the full page to grow vertically.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/App.tsx:1372",
+          "summary": "The session panel rail is `flex-nowrap` with horizontal overflow enabled."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1376",
+          "summary": "Each panel wrapper is fixed-width, full-height, and shrink-safe."
+        },
+        {
+          "type": "source",
+          "path": "src/components/agent-panel.tsx:50",
+          "summary": "Agent panel content keeps overflow internal."
+        },
+        {
+          "type": "source",
+          "path": "src/components/file-tree.tsx:88",
+          "summary": "Files panel tree scrolls internally."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:801",
+          "summary": "Editor tabs scroll internally within the Editor panel."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:937",
+          "summary": "Git file list scrolls within the Git panel."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1065",
+          "summary": "Browser content remains inside its own overflow-hidden panel body."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"usage recordings\"",
+          "exit_code": 0,
+          "summary": "Targeted Playwright coverage revalidated horizontal rail behavior."
+        }
+      ],
+      "gaps": [
+        "Internal scrolling is source-verified for several panels rather than asserted separately for every panel in Playwright."
+      ]
+    },
+    {
+      "id": "AC5",
+      "text": "When a session is first shown in the new layout, only the Agent panel is open by default; other session panels are not auto-opened, and the user can open them on demand through explicit UI controls without displacing the default Agent panel.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/App.tsx:29",
+          "summary": "Default session panels are defined as agent-only."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:176",
+          "summary": "Active session panel state falls back to the default agent-only set."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:177",
+          "summary": "Agent is forcibly pinned into the open panel list if missing."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1345",
+          "summary": "Other panels open through explicit toggle buttons in the header strip."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"usage recordings\"",
+          "exit_code": 0,
+          "summary": "Playwright confirmed only the Agent panel is open by default."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC6",
+      "text": "The Agent panel is a chat UI for the existing OpenCode server for that session, using the already-started server/runtime flow rather than a brand-new backend chat protocol, and the panel no longer renders the current status-card-and-log-console layout as its primary UI.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/App.tsx:121",
+          "summary": "The frontend derives the chat URL from the existing session agent runtime port."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:187",
+          "summary": "The active Agent panel receives the existing runtime-derived chat URL."
+        },
+        {
+          "type": "source",
+          "path": "src/components/agent-panel.tsx:49",
+          "summary": "The Agent panel embeds the OpenCode UI via iframe instead of the old log console."
+        },
+        {
+          "type": "source",
+          "path": "server/web-backend.js:930",
+          "summary": "Backend still starts OpenCode through the existing serve/server runtime flow."
+        },
+        {
+          "type": "source",
+          "path": "src/types/big-ide.ts:103",
+          "summary": "No new frontend chat API contract was added to the Big IDE types."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"usage recordings\"",
+          "exit_code": 0,
+          "summary": "Playwright verified the agent chat surface is present after startup."
+        }
+      ],
+      "gaps": [
+        "The iframe approach assumes the OpenCode web UI continues to be served from the reported root URL and remains embeddable."
+      ]
+    },
+    {
+      "id": "AC7",
+      "text": "Clicking a file in the Files panel opens that file in the existing Editor panel when one is already open, or opens/creates the standard Editor panel when none is open, and activates a tab for the clicked file in that editor surface.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/components/file-tree.tsx:61",
+          "summary": "File rows expose stable selectors and call the open-file handler on click."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:264",
+          "summary": "Opening a file ensures the Editor panel is present for the active session."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:278",
+          "summary": "`openFile` loads or reuses file buffers before activating the tab."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:801",
+          "summary": "Editor tabs render from per-session open file state with an active tab marker."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"usage recordings\"",
+          "exit_code": 0,
+          "summary": "Playwright verified Files -> Editor open flow and active tab activation."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC8",
+      "text": "Session selection remains the driver for panel content, file tree context, and agent/editor state, so switching the selected session updates the visible workspace area to the new session without changing backend API contracts or session identity handling.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "src/App.tsx:166",
+          "summary": "Visible workspace data is derived from the current `activeSession`."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:180",
+          "summary": "Editor state is memoized per active session from session-keyed storage."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:242",
+          "summary": "Per-session editor buffers are stored and updated by session id."
+        },
+        {
+          "type": "source",
+          "path": "src/App.tsx:1212",
+          "summary": "Session-row clicks continue to set the active project/session and drive the workspace."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/source-review.txt",
+          "command": "git diff -- src/types/big-ide.ts server/web-backend.js",
+          "exit_code": 0,
+          "summary": "No backend contract changes are present in the current task diff."
+        }
+      ],
+      "gaps": [
+        "This refresh relies on source review plus passing flow tests; it does not add a dedicated multi-session-switch Playwright assertion."
+      ]
+    },
+    {
+      "id": "AC9",
+      "text": "Playwright end-to-end coverage is added or updated to verify the selected-session workspace area, the default agent-only state, horizontal panel scrolling, Docker-backed sandbox startup path where Docker is available, the Agent chat surface, and the Files-to-Editor open-file flow using stable selectors/assertions.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "source",
+          "path": "e2e/usage-recordings.spec.ts:85",
+          "summary": "The usage-recordings suite covers session lifecycle and workspace rendering."
+        },
+        {
+          "type": "source",
+          "path": "e2e/usage-recordings.spec.ts:121",
+          "summary": "A dedicated case exercises the Docker-requested startup path and agent chat surface."
+        },
+        {
+          "type": "source",
+          "path": "e2e/usage-recordings.spec.ts:149",
+          "summary": "A dedicated case covers Files -> Editor tabs plus Git/Browser panel usability."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/docker-info.txt",
+          "command": "docker info",
+          "exit_code": 0,
+          "summary": "Docker was available in the evidence environment."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/new-layout/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"usage recordings\"",
+          "exit_code": 0,
+          "summary": "All 3 targeted Playwright tests passed."
+        }
+      ],
+      "gaps": [
+        "The Docker Playwright case requests docker mode but still tolerates runtime fallback to host mode if the runtime does not stay on docker."
+      ]
+    }
+  ],
+  "changed_files": [
+    ".agent/tasks/new-layout/spec.md",
+    "e2e/usage-recordings.spec.ts",
+    "src/App.tsx",
+    "src/components/agent-panel.tsx",
+    "src/components/file-tree.tsx",
+    "src/components/ui/panel-shell.tsx",
+    "src/styles.css"
+  ],
+  "commands_for_fresh_verifier": [
+    "git status --short",
+    "git diff -- src/types/big-ide.ts server/web-backend.js",
+    "docker info",
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:e2e -- --grep \"usage recordings\""
+  ],
+  "known_gaps": [
+    "The Docker-specific Playwright scenario is smoke coverage because it tolerates runtime fallback to host mode.",
+    "The styling verdict is source-based and was not paired with a fresh screenshot artifact in this refresh."
+  ]
+}

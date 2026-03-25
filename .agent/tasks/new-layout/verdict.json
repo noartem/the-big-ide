@@ -1,0 +1,101 @@
+{
+  "task_id": "new-layout",
+  "overall_verdict": "PASS",
+  "criteria": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1253` renders a dedicated `session-panel-area` beside the existing project/session list, `src/App.tsx:1266` shows an explicit no-session empty state, and the rerun Playwright flow revalidated both states in `e2e/usage-recordings.spec.ts:89` through `e2e/usage-recordings.spec.ts:95`."
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "reason": "The selected-session workspace is rendered as flat bordered surfaces without rounded shells or shadows in `src/App.tsx:1254`, `src/components/ui/panel-shell.tsx:19`, and `src/App.tsx:1345`, while `src/styles.css:23`, `src/styles.css:64`, and `src/styles.css:68` remove residual radius from shared primitives; current source review found no card-within-card styling in the session workspace path."
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "reason": "Session status, OpenCode status, sandbox mode, Docker availability, runtime context, and start/stop controls are all consolidated in the header at `src/App.tsx:1281` through `src/App.tsx:1339`, while the Agent panel body only renders chat/fallback messaging in `src/components/agent-panel.tsx:17` through `src/components/agent-panel.tsx:57` with no duplicated status cards or log console."
+    },
+    {
+      "id": "AC4",
+      "status": "PASS",
+      "reason": "The panel rail is a horizontal non-wrapping strip with `overflow-x-auto` at `src/App.tsx:1372` through `src/App.tsx:1380`, each panel wrapper is full-height, and overflowing panel content stays internal via `src/components/agent-panel.tsx:50`, `src/components/file-tree.tsx:88`, `src/App.tsx:801`, `src/App.tsx:847`, `src/App.tsx:937`, and `src/App.tsx:1065`; the rerun e2e suite rechecked the rail CSS and side-by-side geometry in `e2e/usage-recordings.spec.ts:95` through `e2e/usage-recordings.spec.ts:97` and `e2e/usage-recordings.spec.ts:208` through `e2e/usage-recordings.spec.ts:216`."
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "reason": "Only `agent` is in the default panel set at `src/App.tsx:29`, active session state rehydrates with agent pinned at `src/App.tsx:176` through `src/App.tsx:177`, and additional panels are user-opened through explicit toggle controls at `src/App.tsx:1345` through `src/App.tsx:1367`; the rerun Playwright flow confirmed the default agent-only state in `e2e/usage-recordings.spec.ts:99` through `e2e/usage-recordings.spec.ts:103`."
+    },
+    {
+      "id": "AC6",
+      "status": "PASS",
+      "reason": "The Agent panel derives its URL from the existing session runtime port in `src/App.tsx:121` through `src/App.tsx:127` and `src/App.tsx:187`, then embeds that existing OpenCode server via iframe in `src/components/agent-panel.tsx:49` through `src/components/agent-panel.tsx:56`; backend startup still uses the existing OpenCode serve flow in `server/web-backend.js:930` through `server/web-backend.js:1005`, and `src/types/big-ide.ts:103` through `src/types/big-ide.ts:147` show no new chat API contract."
+    },
+    {
+      "id": "AC7",
+      "status": "PASS",
+      "reason": "File rows dispatch `onOpenFile` from `src/components/file-tree.tsx:60` through `src/components/file-tree.tsx:71`, `openFile` forces an existing-or-new Editor panel open at `src/App.tsx:278` through `src/App.tsx:285`, and editor tabs are activated from per-session state in `src/App.tsx:801` through `src/App.tsx:837`; the rerun e2e path reverified the README click opens the Editor and activates the correct tab in `e2e/usage-recordings.spec.ts:192` through `e2e/usage-recordings.spec.ts:205`."
+    },
+    {
+      "id": "AC8",
+      "status": "PASS",
+      "reason": "Visible workspace content is derived from `activeSession` at `src/App.tsx:166` through `src/App.tsx:188`, per-session editor state is keyed by session id at `src/App.tsx:142`, `src/App.tsx:242` through `src/App.tsx:246`, and session clicks continue to drive the active workspace at `src/App.tsx:1212` through `src/App.tsx:1225`; `git diff -- src/types/big-ide.ts server/web-backend.js` returned no changes, so the current task state does not alter backend API contracts or session identity handling."
+    },
+    {
+      "id": "AC9",
+      "status": "PASS",
+      "reason": "`e2e/usage-recordings.spec.ts:85` through `e2e/usage-recordings.spec.ts:267` now cover the selected-session workspace area, default agent-only state, horizontal rail behavior, agent chat surface, Docker-requested startup flow, and Files-to-Editor activation with stable `data-testid` selectors; the fresh reruns of `docker info` and `npm run test:e2e -- --grep \"usage recordings\"` both passed in the current environment with Docker available. The Docker-path assertion remains conditional on the runtime reporting docker mode, but the repository does include dedicated Docker-path coverage and it passed in this verifier run."
+    }
+  ],
+  "commands_run": [
+    {
+      "command": "git status --short",
+      "exit_code": 0,
+      "summary": "Confirmed the task changes are limited to task artifacts plus the expected frontend and e2e files."
+    },
+    {
+      "command": "git diff -- src/types/big-ide.ts server/web-backend.js",
+      "exit_code": 0,
+      "summary": "No current diff in backend contract files, supporting the no-API-contract-change check."
+    },
+    {
+      "command": "docker info",
+      "exit_code": 0,
+      "summary": "Docker is available in the verifier environment."
+    },
+    {
+      "command": "npm run typecheck",
+      "exit_code": 0,
+      "summary": "TypeScript typecheck passed."
+    },
+    {
+      "command": "npm run build",
+      "exit_code": 0,
+      "summary": "Production build passed; Vite reported only a non-blocking chunk size warning."
+    },
+    {
+      "command": "npm run test:e2e -- --grep \"usage recordings\"",
+      "exit_code": 0,
+      "summary": "All 3 targeted Playwright usage-recording tests passed in the current repository state."
+    }
+  ],
+  "artifacts_used": [
+    ".agent/tasks/new-layout/spec.md",
+    ".agent/tasks/new-layout/evidence.md",
+    ".agent/tasks/new-layout/evidence.json",
+    ".agent/tasks/new-layout/raw/build.txt",
+    ".agent/tasks/new-layout/raw/docker-info.txt",
+    ".agent/tasks/new-layout/raw/source-review.txt",
+    ".agent/tasks/new-layout/raw/test-integration.txt",
+    ".agent/tasks/new-layout/raw/test-unit.txt",
+    "src/App.tsx",
+    "src/components/agent-panel.tsx",
+    "src/components/file-tree.tsx",
+    "src/components/ui/panel-shell.tsx",
+    "src/styles.css",
+    "src/types/big-ide.ts",
+    "server/web-backend.js",
+    "e2e/usage-recordings.spec.ts"
+  ]
+}

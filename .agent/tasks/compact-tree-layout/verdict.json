@@ -1,0 +1,75 @@
+{
+  "task_id": "compact-tree-layout",
+  "verified_at": "2026-03-26T17:22:34+05:00",
+  "overall_verdict": "PASS",
+  "criteria": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1358`, `src/App.tsx:1494`, and `src/App.tsx:1601` keep the page shell height-constrained and move overflow into the panel scroll region; `e2e/usage-recordings.spec.ts:108` confirms the panel region exposes scrolling instead of the shell."
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "reason": "`src/App.tsx:140` defines project-relative labels, `src/App.tsx:1000`, `src/App.tsx:1034`, and `src/App.tsx:1057` use them for Files and Editor labels, and the remaining panel subtitles use short non-path labels."
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "reason": "`src/components/editor-panel.tsx:57`-`src/components/editor-panel.tsx:63` make the editor fill the panel height, while `src/styles.css:57`-`src/styles.css:70` keep CodeMirror at full height with internal scrolling."
+    },
+    {
+      "id": "AC4",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1360`-`src/App.tsx:1374` render only `The Big IDE` and the new-project action in the top-left header, and `e2e/usage-recordings.spec.ts:14`-`e2e/usage-recordings.spec.ts:15` asserts the exact title."
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1383`-`src/App.tsx:1481` render a compact projects tree with expandable project rows, nested session rows, reduced chrome, and preserved hierarchy instead of card-heavy blocks."
+    },
+    {
+      "id": "AC6",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1365`-`src/App.tsx:1374`, `src/App.tsx:1429`-`src/App.tsx:1438`, and `src/App.tsx:1449`-`src/App.tsx:1466` preserve project creation, per-project session creation, and active selection; the corresponding UI flows pass in `e2e/usage-recordings.spec.ts:18`-`e2e/usage-recordings.spec.ts:31` and `e2e/usage-recordings.spec.ts:97`-`e2e/usage-recordings.spec.ts:141`."
+    },
+    {
+      "id": "AC7",
+      "status": "PASS",
+      "reason": "`src/App.tsx:681`-`src/App.tsx:718` still focus an existing editor for an already-open file and only open a new editor panel for a different file; `e2e/usage-recordings.spec.ts:229`-`e2e/usage-recordings.spec.ts:241` verifies that behavior."
+    }
+  ],
+  "commands_run": [
+    {
+      "command": "npm run typecheck",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "`tsc --noEmit` completed without errors."
+    },
+    {
+      "command": "npm run build",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "`vite build` succeeded; Vite emitted a non-failing chunk-size warning for the generated bundle."
+    },
+    {
+      "command": "npm run test:e2e -- --grep \"usage recordings\"",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "Playwright ran 3 matching Chromium tests and all 3 passed."
+    }
+  ],
+  "artifacts_used": [
+    ".agent/tasks/compact-tree-layout/spec.md",
+    ".agent/tasks/compact-tree-layout/evidence.md",
+    ".agent/tasks/compact-tree-layout/evidence.json",
+    "src/App.tsx",
+    "src/components/editor-panel.tsx",
+    "src/styles.css",
+    "e2e/usage-recordings.spec.ts"
+  ],
+  "caveats": [
+    "AC1, AC2, AC3, and AC5 still rely partly on code inspection for layout and visual compactness; the fresh automated proof covers the key usage flows but not every visual metric directly.",
+    "The passing build still reports Vite's chunk-size warning, but it does not block the task criteria or the build result."
+  ]
+}

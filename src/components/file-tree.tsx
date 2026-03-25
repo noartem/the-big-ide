@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
 import { ChevronRight, FileCode2, Folder, FolderOpen } from "lucide-react";
+import { useState } from "react";
 
-import type { FileNode } from "@/types/big-ide";
 import { cn } from "@/lib/utils";
+import type { FileNode } from "@/types/big-ide";
 
 interface FileTreeProps {
   nodes: FileNode[];
@@ -14,33 +14,25 @@ interface FileTreeProps {
 export function FileTree({ nodes, selectedFilePath, onOpenFile, isLoading }: FileTreeProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const normalizedExpanded = useMemo(() => {
-    const initialState: Record<string, boolean> = {};
-    for (const node of nodes) {
-      if (node.type === "directory") {
-        initialState[node.path] = expanded[node.path] ?? true;
-      }
-    }
-    return initialState;
-  }, [expanded, nodes]);
-
   const toggleDir = (dirPath: string) => {
     setExpanded((previous) => ({
       ...previous,
-      [dirPath]: !(previous[dirPath] ?? true)
+      [dirPath]: !(previous[dirPath] ?? false)
     }));
   };
 
   const renderNode = (node: FileNode, depth: number) => {
-    const rowClassName = "group flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-xs leading-4 transition-colors";
+    const rowClassName = "group flex w-full items-center gap-1.5 px-1.5 py-1 text-left text-xs leading-4 transition-colors";
 
     if (node.type === "directory") {
-      const isOpen = normalizedExpanded[node.path] ?? true;
+      const isOpen = expanded[node.path] ?? false;
       return (
         <div key={node.path}>
           <button
+            data-testid="file-tree-directory"
+            data-file-path={node.path}
             type="button"
-            className={cn(rowClassName, "text-foreground/90 hover:bg-muted/80")}
+            className={cn(rowClassName, "text-foreground/90 hover:bg-muted/40")}
             style={{ paddingLeft: `${depth * 12 + 6}px` }}
             onClick={() => toggleDir(node.path)}
           >
@@ -49,22 +41,22 @@ export function FileTree({ nodes, selectedFilePath, onOpenFile, isLoading }: Fil
             <span className="truncate">{node.name}</span>
           </button>
 
-          {isOpen && node.children?.length
-            ? node.children.map((childNode) => renderNode(childNode, depth + 1))
-            : null}
+          {isOpen && node.children?.length ? node.children.map((childNode) => renderNode(childNode, depth + 1)) : null}
         </div>
       );
     }
 
     return (
       <button
+        data-testid="file-tree-file"
+        data-file-path={node.path}
         type="button"
         key={node.path}
         style={{ paddingLeft: `${depth * 12 + 6}px` }}
         className={cn(
           rowClassName,
-          "text-foreground/80 hover:bg-muted/80",
-          selectedFilePath === node.path && "bg-primary/10 text-foreground shadow-[inset_0_0_0_1px_hsl(var(--primary)/0.14)]"
+          "border-t border-transparent text-foreground/80 hover:bg-muted/40",
+          selectedFilePath === node.path && "bg-muted/50 text-foreground"
         )}
         onClick={() => onOpenFile(node.path)}
       >
@@ -83,5 +75,5 @@ export function FileTree({ nodes, selectedFilePath, onOpenFile, isLoading }: Fil
     return <div className="flex h-full items-center justify-center px-3 text-xs text-muted-foreground">No files yet.</div>;
   }
 
-  return <div className="h-full space-y-0.5 overflow-auto p-2">{nodes.map((node) => renderNode(node, 0))}</div>;
+  return <div className="h-full overflow-auto py-1">{nodes.map((node) => renderNode(node, 0))}</div>;
 }

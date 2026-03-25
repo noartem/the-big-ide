@@ -1,0 +1,43 @@
+Evidence source review for TASK_ID new-layout
+
+AC1
+- Workspace/sidebar split and explicit empty state: src/App.tsx:1253, src/App.tsx:1254, src/App.tsx:1266
+
+AC2
+- Flat brutalist panel shell: src/components/ui/panel-shell.tsx:19
+- Global radius removed for workspace/editor/terminal: src/styles.css:23, src/styles.css:64, src/styles.css:68
+- Session workspace uses border/gap layout and rounded-none controls: src/App.tsx:1254, src/App.tsx:1288, src/App.tsx:1323, src/App.tsx:1360
+
+AC3
+- Header contains runtime/status/start-stop context: src/App.tsx:1285, src/App.tsx:1297, src/App.tsx:1305, src/App.tsx:1321
+- Agent panel body only renders chat/fallback surface: src/components/agent-panel.tsx:17, src/components/agent-panel.tsx:49
+
+AC4
+- Horizontal non-wrapping rail: src/App.tsx:1372
+- Full-height panel wrappers: src/App.tsx:1376
+- Internal scrolling examples: src/components/agent-panel.tsx:50, src/components/file-tree.tsx:88, src/App.tsx:801, src/App.tsx:847, src/App.tsx:919, src/App.tsx:1065
+
+AC5
+- Default agent-only state: src/App.tsx:29, src/App.tsx:176, src/App.tsx:177
+- Explicit panel toggles without displacing agent: src/App.tsx:30, src/App.tsx:112, src/App.tsx:1345
+
+AC6
+- Agent panel uses current OpenCode server port: src/App.tsx:187, src/components/agent-panel.tsx:49
+- Existing backend startOpenCodeAgent still serves OpenCode on a port, no new chat API: server/web-backend.js:930, server/web-backend.js:985, src/types/big-ide.ts:103
+
+AC7
+- File click opens/reveals editor panel and activates tab state: src/App.tsx:264, src/App.tsx:278, src/App.tsx:284, src/App.tsx:801, src/components/file-tree.tsx:61
+
+AC8
+- Session selection drives active session content: src/App.tsx:166, src/App.tsx:180, src/App.tsx:1212, src/App.tsx:1222
+- Per-session editor state keyed by session id: src/App.tsx:142, src/App.tsx:242, src/App.tsx:249
+
+AC9
+- Playwright coverage: e2e/usage-recordings.spec.ts:85, e2e/usage-recordings.spec.ts:121, e2e/usage-recordings.spec.ts:149
+- Stable selectors used: e2e/usage-recordings.spec.ts:92, e2e/usage-recordings.spec.ts:99, e2e/usage-recordings.spec.ts:198, e2e/usage-recordings.spec.ts:205
+
+Command artifacts
+- raw/test-unit.txt
+- raw/build.txt
+- raw/test-integration.txt
+- raw/docker-info.txt

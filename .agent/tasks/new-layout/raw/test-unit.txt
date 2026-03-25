@@ -1,0 +1,8 @@
+$ npm run typecheck
+
+
+> the-big-ide@0.1.5 typecheck
+> tsc --noEmit
+
+
+exit_code=0

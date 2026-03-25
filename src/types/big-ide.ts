@@ -2,7 +2,7 @@ export type SandboxMode = "docker" | "host";
 
 export type RuntimeTarget = "electron" | "web";
 
-export type PanelId = "projects" | "files" | "editor" | "terminal" | "agent" | "browser";
+export type PanelId = "projects" | "files" | "editor" | "terminal" | "agent" | "browser" | "git";
 
 export interface DependencyReport {
   available: string[];
