@@ -1,0 +1,13 @@
+$ npm run test:e2e
+
+> the-big-ide@0.1.5 test:e2e
+> playwright test
+
+Running 4 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/usage-recordings.spec.ts:97:3 › usage recordings › session lifecycle from UI (7.8s)
+  ✓  2 [chromium] › e2e/usage-recordings.spec.ts:144:3 › usage recordings › docker sandbox startup path shows agent chat when Docker works (10.2s)
+  ✓  3 [chromium] › e2e/usage-recordings.spec.ts:194:3 › usage recordings › files open one-editor-per-file and git/browser panels stay usable (8.9s)
+  ✓  4 [chromium] › e2e/workspace-panel-polish.spec.ts:62:1 › panel drag reorder still works after resize and horizontal scroll (8.4s)
+
+  4 passed (39.6s)

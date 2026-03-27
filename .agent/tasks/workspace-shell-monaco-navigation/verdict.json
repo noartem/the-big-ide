@@ -1,0 +1,95 @@
+{
+  "task_id": "workspace-shell-monaco-navigation",
+  "verified_at": "2026-03-27T20:01:35+05:00",
+  "overall_verdict": "PASS",
+  "criteria": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "reason": "`src/App.tsx:303-305` computes a URL-backed browser title with a neutral `Browser` fallback, and `src/App.tsx:1435-1489` renders that title plus the preserved `web-url-input`, `web-open-button`, `web-iframe`, and `web-status` selectors, with the navigate affordance now inline as an icon button that only appears when the normalized draft differs and still submits on Enter via the form."
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "reason": "`src/components/editor-panel.tsx:1-335` now mounts Monaco, wires model changes back to `onChange`, and binds `Ctrl/Cmd+S`; `src/App.tsx:776-822` still opens/focuses one editor panel per file and `src/App.tsx:447-483,1239-1292,1075-1082` keeps the existing save flow intact; `npm run test:e2e -- e2e/usage-recordings.spec.ts --grep \"files open one-editor-per-file and git/browser panels stay usable\"` passed; and the current Monaco language map at `src/components/editor-panel.tsx:170-208` covers the same handled file types the previous CodeMirror implementation exposed in the current `git diff -- src/components/editor-panel.tsx`."
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "reason": "`src/components/editor-panel.tsx:24-118` reads the root theme CSS variables, normalizes those shared HSL tokens into Monaco-safe colors, defines a single Monaco theme from them, and `src/components/editor-panel.tsx:258-264` reapplies that theme when root theme attributes change, so Monaco follows the existing app-wide theme source of truth instead of adding its own toggle."
+    },
+    {
+      "id": "AC4",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1548-1735` adds an explicit collapse/expand affordance, shrinks the sidebar from `md:w-[20rem]` to `md:w-20`, preserves active project/session awareness with the compact summary block, and leaves the session workspace in the sibling `flex-1` region to reclaim the freed width on medium+ layouts."
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1770-1825` makes the active-session header denser on large screens by reducing vertical padding, moving the name/chips into a shared `lg:flex` row with `lg:flex-nowrap` chip behavior, and keeping `active-session-label`, `start-session-button`, `stop-session-button`, and `new-panel-button` in the same compact header region without removing small-screen wrapping."
+    },
+    {
+      "id": "AC6",
+      "status": "PASS",
+      "reason": "`src/App.tsx:270-279` flattens sessions across all projects in visible order, `src/App.tsx:602-625` cycles that workspace-wide list with wraparound while skipping empty projects naturally, and `src/App.tsx:1095-1104` binds `Ctrl+Alt+Up/Down` to update both active project and active session together."
+    },
+    {
+      "id": "AC7",
+      "status": "PASS",
+      "reason": "`src/App.tsx:844-867` cycles the active session's panels in render order with wraparound and no-ops for zero/one panel, `src/App.tsx:427-445` scrolls the next panel into view, `src/App.tsx:1892-1896` keeps the focused styling on the selected panel, and `npm run test:e2e -- e2e/workspace-panel-polish.spec.ts` passed the related resize/scroll horizontal-panel workflow."
+    },
+    {
+      "id": "AC8",
+      "status": "PASS",
+      "reason": "`src/App.tsx:756-762` and `src/App.tsx:1119-1122` open the Add Panel flow from `Ctrl+Alt+N` in the shared renderer path used by Electron and web mode, while `src/App.tsx:1813-1823`, `src/App.tsx:1924-1925`, and `src/App.tsx:1457-1465` expose shortcut/tooltips on the New Panel control and the icon-only browser navigate control."
+    }
+  ],
+  "commands_run": [
+    {
+      "command": "npm run typecheck",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "`tsc --noEmit` completed without errors."
+    },
+    {
+      "command": "npm run build",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "`vite build` succeeded; Vite emitted only a non-blocking chunk-size warning."
+    },
+    {
+      "command": "npm run test:e2e -- e2e/usage-recordings.spec.ts --grep \"files open one-editor-per-file and git/browser panels stay usable\"",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "The fresh Playwright run passed the file-open/editor-panel path and the existing git/browser smoke flow."
+    },
+    {
+      "command": "npm run test:e2e -- e2e/workspace-panel-polish.spec.ts",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "The fresh Playwright run passed the resize + horizontal-scroll panel workflow."
+    },
+    {
+      "command": "git diff -- src/components/editor-panel.tsx src/App.tsx package.json src/styles.css e2e/workspace-panel-polish.spec.ts",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "The current diff confirms the Monaco migration, the preserved file-open/save wiring, the shortcut additions, the sidebar/header changes, and that the Monaco language map covers the file types previously handled by the removed CodeMirror extension setup."
+    }
+  ],
+  "artifacts_used": [
+    ".agent/tasks/workspace-shell-monaco-navigation/spec.md",
+    ".agent/tasks/workspace-shell-monaco-navigation/evidence.md",
+    ".agent/tasks/workspace-shell-monaco-navigation/evidence.json",
+    "package.json",
+    "src/App.tsx",
+    "src/components/editor-panel.tsx",
+    "src/components/ui/panel-shell.tsx",
+    "src/styles.css",
+    "e2e/usage-recordings.spec.ts",
+    "e2e/workspace-panel-polish.spec.ts"
+  ],
+  "caveats": [
+    "AC1 and AC4-AC8 rely on current source inspection plus fresh command results because the checked-in Playwright suite does not directly assert every layout detail or shortcut path.",
+    "A stale prior `problems.md` from the earlier failed verification was removed because the current overall verdict is PASS."
+  ]
+}

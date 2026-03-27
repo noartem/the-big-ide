@@ -54,20 +54,20 @@ body {
   @apply bg-primary/50;
 }
 
-.cm-theme,
-.cm-editor,
-.cm-scroller {
+.monaco-editor-container,
+.monaco-editor,
+.monaco-editor .overflow-guard {
   height: 100%;
+}
+
+.monaco-editor,
+.monaco-editor .monaco-scrollable-element {
   font-family: "IBM Plex Mono", monospace;
   font-size: 12px;
 }
 
-.cm-editor {
+.monaco-editor {
   border-radius: 0;
-}
-
-.cm-scroller {
-  overflow: auto;
 }
 
 .xterm .xterm-viewport {

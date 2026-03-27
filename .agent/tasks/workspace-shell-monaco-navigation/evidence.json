@@ -1,0 +1,163 @@
+{
+  "task_id": "workspace-shell-monaco-navigation",
+  "overall_status": "PASS",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "Browser panel chrome reflects navigation state, shows the current URL in the panel title, uses an inline icon-only navigate control when the draft differs, and supports Enter navigation while preserving existing browser selectors.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Browser title derives from the loaded URL with a neutral fallback, and the browser panel preserves the required selectors while rendering the inline icon-only navigate control."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-shell-monaco-navigation/raw/test-integration.txt",
+          "command": "npm run test:e2e",
+          "summary": "Browser smoke coverage passed in the full Playwright suite."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC2",
+      "text": "Editor panels use Monaco instead of CodeMirror without regressing current file-open, edit, and save behavior, including Ctrl/Cmd+S and current language coverage.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/components/editor-panel.tsx",
+          "summary": "EditorPanel mounts Monaco, wires model changes to app state, binds Ctrl/Cmd+S, and maps the handled file extensions to Monaco languages."
+        },
+        {
+          "type": "file",
+          "path": "package.json",
+          "summary": "The Monaco runtime dependencies were added for the editor migration."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-shell-monaco-navigation/raw/test-integration.txt",
+          "command": "npm run test:e2e",
+          "summary": "Playwright passed the file-open/editor/browser/git flow coverage after the Monaco fix."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC3",
+      "text": "Monaco theme follows the shared app theme tokens and updates with the global theme instead of introducing an editor-only theme toggle.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/components/editor-panel.tsx",
+          "summary": "Monaco theme colors are derived from root CSS variables and reapplied when root theme attributes change."
+        },
+        {
+          "type": "file",
+          "path": "src/styles.css",
+          "summary": "The shared root theme tokens and Monaco-aligned shell styles come from the existing app theme stylesheet."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC4",
+      "text": "The projects sidebar can be collapsed to a materially narrower compact state and expanded again without losing active workspace awareness.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "App adds an explicit collapse/expand affordance, narrows the sidebar in compact mode, and preserves active project/session context."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC5",
+      "text": "The active session header becomes denser on large screens, keeping the session name and chips on one line where space allows while preserving key controls and test ids.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The header uses a slimmer large-screen layout while preserving the active-session, start, stop, and new-panel controls."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC6",
+      "text": "Ctrl+Alt+Up and Ctrl+Alt+Down cycle sessions across projects with wraparound, updating the active project and active session together.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Workspace session order is flattened across projects and the global keydown handler binds Ctrl+Alt+Up/Down to wraparound session cycling."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC7",
+      "text": "Ctrl+Alt+Left and Ctrl+Alt+Right cycle focused panels with wraparound, keeping focus styling and scrolling the target panel into view.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Panel cycling uses active-session panel order with wraparound, preserves focused styling, and scrolls the target panel into view."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-shell-monaco-navigation/raw/test-integration.txt",
+          "command": "npm run test:e2e",
+          "summary": "Playwright passed the workspace panel polish coverage for the panel rail behavior."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC8",
+      "text": "Ctrl+Alt+N opens the Add Panel flow in browser-safe fashion, and shortcut hints appear in hover tooltips where available, including the new panel button and icon-only browser navigate control.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The global keydown handler binds Ctrl+Alt+N to open the Add Panel dialog and exposes shortcut hints on the relevant controls."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-shell-monaco-navigation/raw/test-integration.txt",
+          "command": "npm run test:e2e",
+          "summary": "The browser-mode Playwright suite passed with the updated panel controls in place."
+        }
+      ],
+      "gaps": []
+    }
+  ],
+  "changed_files": [
+    "package.json",
+    "package-lock.json",
+    "src/App.tsx",
+    "src/components/editor-panel.tsx",
+    "src/components/ui/panel-shell.tsx",
+    "src/lib/yaml.worker.ts",
+    "src/styles.css"
+  ],
+  "commands_for_fresh_verifier": [
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:e2e"
+  ],
+  "known_gaps": [
+    "No dedicated lint script exists in package.json.",
+    "No dedicated unit-test script exists in package.json.",
+    "The production build emits a non-blocking Vite chunk-size warning recorded in raw/build.txt."
+  ]
+}

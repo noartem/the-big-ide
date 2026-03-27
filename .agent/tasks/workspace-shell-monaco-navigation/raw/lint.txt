@@ -1,0 +1,7 @@
+No dedicated lint script is defined in package.json.
+
+Evidence:
+- package.json:7-21 lists available npm scripts and does not include a lint target.
+
+Result:
+- NOT AVAILABLE

@@ -1,5 +1,5 @@
 import { FormEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, GitBranch, GitCommitHorizontal, Globe, GripHorizontal, Play, RefreshCcw, Save, Square, X } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronRight, GitBranch, GitCommitHorizontal, GripHorizontal, PanelLeftClose, PanelLeftOpen, Play, RefreshCcw, Save, Square, X } from "lucide-react";
 
 import { AgentPanel } from "@/components/agent-panel";
 import { EditorPanel } from "@/components/editor-panel";
@@ -139,6 +139,17 @@ function fileLabel(filePath: string) {
   return filePath.split("/").filter(Boolean).pop() ?? filePath;
 }
 
+function projectCompactLabel(name: string) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+
+  return initials || name.slice(0, 2).toUpperCase();
+}
+
 function toRelativePathLabel(basePath: string | null | undefined, targetPath: string | null | undefined, rootLabel = "./") {
   if (!targetPath) {
     return "";
@@ -193,6 +204,7 @@ export default function App() {
   const [isPanelDialogOpen, setIsPanelDialogOpen] = useState(false);
   const [draggedPanelId, setDraggedPanelId] = useState<string | null>(null);
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [isProjectsSidebarCollapsed, setIsProjectsSidebarCollapsed] = useState(false);
 
   const [infoMessage, setInfoMessage] = useState("Initializing workspace...");
   const [errorMessage, setErrorMessage] = useState("");
@@ -255,6 +267,18 @@ export default function App() {
     return selectedFilePathBySession[activeSession.id] ?? null;
   }, [activeSession, selectedFilePathBySession]);
 
+  const workspaceSessions = useMemo(
+    () =>
+      projects.flatMap((project) =>
+        project.sessions.map((session) => ({
+          projectId: project.id,
+          projectName: project.name,
+          session
+        }))
+      ),
+    [projects]
+  );
+
   const activeEditorPanel = useMemo(
     () => activePanels.find((panel) => panel.id === activeFocusedPanelId && panel.kind === "editor") ?? null,
     [activeFocusedPanelId, activePanels]
@@ -278,6 +302,7 @@ export default function App() {
   }, [activeSession, panelWidthsBySession]);
   const normalizedWebDraftUrl = useMemo(() => normalizeWebUrl(webDraftUrl), [webDraftUrl]);
   const showWebOpenButton = normalizedWebDraftUrl !== webUrl;
+  const currentBrowserPanelTitle = useMemo(() => (webUrl === "about:blank" ? "Browser" : webUrl), [webUrl]);
 
   const refreshProjects = useCallback(async () => {
     if (!window.bigIDE) {
@@ -574,17 +599,30 @@ export default function App() {
     }
   }, [activeProjectId, activeSessionId, refreshProjects]);
 
-  const cycleSession = useCallback(() => {
-    if (!activeProject?.sessions.length) {
-      return;
-    }
+  const cycleSession = useCallback(
+    (direction: 1 | -1 = 1) => {
+      if (!workspaceSessions.length) {
+        return;
+      }
 
-    const sessions = activeProject.sessions;
-    const currentIndex = sessions.findIndex((session) => session.id === activeSessionId);
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % sessions.length;
-    setActiveSessionId(sessions[nextIndex]?.id ?? null);
-    setInfoMessage(`Switched to ${sessions[nextIndex]?.name ?? "session"}`);
-  }, [activeProject, activeSessionId]);
+      const currentIndex = workspaceSessions.findIndex(({ session }) => session.id === activeSessionId);
+      const fallbackIndex = direction > 0 ? 0 : workspaceSessions.length - 1;
+      const nextIndex = currentIndex === -1 ? fallbackIndex : (currentIndex + direction + workspaceSessions.length) % workspaceSessions.length;
+      const nextSession = workspaceSessions[nextIndex];
+      if (!nextSession) {
+        return;
+      }
+
+      setExpandedProjects((previous) => ({
+        ...previous,
+        [nextSession.projectId]: true
+      }));
+      setActiveProjectId(nextSession.projectId);
+      setActiveSessionId(nextSession.session.id);
+      setInfoMessage(`Switched to ${nextSession.projectName} / ${nextSession.session.name}`);
+    },
+    [activeSessionId, workspaceSessions]
+  );
 
   const applyGitSnapshot = useCallback((snapshot: GitStatusSnapshot) => {
     setGitStatus(snapshot);
@@ -715,6 +753,14 @@ export default function App() {
     [normalizedWebDraftUrl]
   );
 
+  const openPanelDialog = useCallback(() => {
+    if (!activeSession) {
+      return;
+    }
+
+    setIsPanelDialogOpen(true);
+  }, [activeSession]);
+
   const addPanelToActiveSession = useCallback(
     (kind: SessionPanelKind) => {
       if (!activeSession) {
@@ -793,6 +839,31 @@ export default function App() {
       });
     },
     []
+  );
+
+  const cycleActivePanel = useCallback(
+    (direction: 1 | -1) => {
+      if (!activeSession) {
+        return;
+      }
+
+      const panels = panelInstancesBySession[activeSession.id] ?? [];
+      if (panels.length <= 1) {
+        return;
+      }
+
+      const currentIndex = panels.findIndex((panel) => panel.id === activeFocusedPanelId);
+      const fallbackIndex = direction > 0 ? 0 : panels.length - 1;
+      const nextIndex = currentIndex === -1 ? fallbackIndex : (currentIndex + direction + panels.length) % panels.length;
+      const nextPanel = panels[nextIndex];
+      if (!nextPanel) {
+        return;
+      }
+
+      focusPanel(activeSession.id, nextPanel.id);
+      scrollPanelIntoView(nextPanel.id);
+    },
+    [activeFocusedPanelId, activeSession, focusPanel, panelInstancesBySession, scrollPanelIntoView]
   );
 
   useEffect(() => {
@@ -1021,15 +1092,45 @@ export default function App() {
         return;
       }
 
+      if (event.ctrlKey && event.altKey && key === "arrowup") {
+        event.preventDefault();
+        cycleSession(-1);
+        return;
+      }
+
+      if (event.ctrlKey && event.altKey && key === "arrowdown") {
+        event.preventDefault();
+        cycleSession(1);
+        return;
+      }
+
+      if (event.ctrlKey && event.altKey && key === "arrowleft") {
+        event.preventDefault();
+        cycleActivePanel(-1);
+        return;
+      }
+
+      if (event.ctrlKey && event.altKey && key === "arrowright") {
+        event.preventDefault();
+        cycleActivePanel(1);
+        return;
+      }
+
+      if (event.ctrlKey && event.altKey && key === "n") {
+        event.preventDefault();
+        openPanelDialog();
+        return;
+      }
+
       if ((event.metaKey || event.ctrlKey) && key === "tab") {
         event.preventDefault();
-        cycleSession();
+        cycleSession(1);
       }
     };
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeEditorPanel, activeProjectId, cycleSession, openSessionDialog, saveEditorFile]);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [activeEditorPanel, activeProjectId, cycleActivePanel, cycleSession, openPanelDialog, openSessionDialog, saveEditorFile]);
 
   const startPanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>, sessionId: string, panelId: string) => {
     const panelNode = panelRefs.current[panelId];
@@ -1170,6 +1271,7 @@ export default function App() {
                 <EditorPanel
                   filePath={editorFilePath}
                   value={editorBuffer?.value ?? ""}
+                  onSave={editorFilePath ? () => void saveEditorFile(editorFilePath) : undefined}
                   onChange={(value) => {
                     if (!editorFilePath) {
                       return;
@@ -1331,7 +1433,8 @@ export default function App() {
         case "browser":
           return (
             <PanelShell
-              title="Browser"
+              title={currentBrowserPanelTitle}
+              titleClassName="normal-case text-[13px] font-medium tracking-normal text-foreground"
               className="h-full min-h-0"
               actions={
                 <>
@@ -1342,19 +1445,28 @@ export default function App() {
             >
               <div className="flex h-full min-h-0 flex-col">
                 <form className="flex gap-px border-b border-border p-2" onSubmit={openWebView}>
-                  <Input
-                    data-testid="web-url-input"
-                    value={webDraftUrl}
-                    onChange={(event) => setWebDraftUrl(event.target.value)}
-                    placeholder={DEFAULT_BROWSER_URL}
-                    className="rounded-none"
-                  />
-                  {showWebOpenButton ? (
-                    <Button data-testid="web-open-button" type="submit" className="rounded-none">
-                      <Globe className="mr-2 size-4" />
-                      Go
-                    </Button>
-                  ) : null}
+                  <div className="relative min-w-0 flex-1">
+                    <Input
+                      data-testid="web-url-input"
+                      value={webDraftUrl}
+                      onChange={(event) => setWebDraftUrl(event.target.value)}
+                      placeholder={DEFAULT_BROWSER_URL}
+                      className="rounded-none pr-11"
+                    />
+                    {showWebOpenButton ? (
+                      <Button
+                        data-testid="web-open-button"
+                        type="submit"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 size-8 -translate-y-1/2 rounded-none"
+                        aria-label={`Navigate to ${normalizedWebDraftUrl}`}
+                        title={`Navigate to ${normalizedWebDraftUrl} (Enter)`}
+                      >
+                        <ArrowRight className="size-4" />
+                      </Button>
+                    ) : null}
+                  </div>
                 </form>
 
                 <span data-testid="web-status" className="sr-only">
@@ -1388,6 +1500,7 @@ export default function App() {
       activeSelectedFilePath,
       activeSession,
       busyAction,
+      currentBrowserPanelTitle,
       discardGitSelection,
       editorStateBySession,
       gitBusyAction,
@@ -1407,6 +1520,7 @@ export default function App() {
       stageGitSelection,
       treeLoading,
       treeNodes,
+      normalizedWebDraftUrl,
       webDraftUrl,
       webState,
       webUrl
@@ -1431,124 +1545,193 @@ export default function App() {
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground md:flex-row">
-      <aside className="flex h-full min-h-0 w-full flex-col border-b border-border bg-card md:w-[20rem] md:min-w-[20rem] md:border-b-0 md:border-r">
-        <div className="border-b border-border px-4 py-3">
-          <div className="flex items-center justify-between gap-3">
-            <h1 data-testid="workspace-app-title" className="truncate text-lg font-semibold tracking-tight">
-              The Big IDE
-            </h1>
+      <aside
+        className={cn(
+          "flex h-full min-h-0 w-full flex-col border-b border-border bg-card md:border-b-0 md:border-r",
+          isProjectsSidebarCollapsed ? "md:w-20 md:min-w-[5rem]" : "md:w-[20rem] md:min-w-[20rem]"
+        )}
+      >
+        <div className={cn("border-b border-border px-4 py-3", isProjectsSidebarCollapsed && "md:px-2")}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-8 rounded-none"
+                aria-label={isProjectsSidebarCollapsed ? "Expand projects panel" : "Collapse projects panel"}
+                title={isProjectsSidebarCollapsed ? "Expand projects panel" : "Collapse projects panel"}
+                onClick={() => setIsProjectsSidebarCollapsed((current) => !current)}
+              >
+                {isProjectsSidebarCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+              </Button>
+              <h1 data-testid="workspace-app-title" className={cn("truncate text-lg font-semibold tracking-tight", isProjectsSidebarCollapsed && "md:hidden")}>
+                The Big IDE
+              </h1>
+            </div>
             <Button
               data-testid="new-project-button"
               type="button"
               size="sm"
               variant="outline"
-              className="shrink-0 rounded-none px-2.5"
+              className={cn("shrink-0 rounded-none px-2.5", isProjectsSidebarCollapsed && "md:size-8 md:px-0")}
               onClick={openProjectDialog}
+              title="Create project"
             >
-              [+ New Project]
+              <span className={cn(isProjectsSidebarCollapsed && "md:sr-only")}>[+ New Project]</span>
+              <span className={cn("hidden", isProjectsSidebarCollapsed && "md:inline")}>+</span>
             </Button>
           </div>
         </div>
 
-        <nav aria-label="Projects and sessions" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+        <nav
+          aria-label="Projects and sessions"
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto overscroll-contain py-3",
+            isProjectsSidebarCollapsed ? "px-2" : "px-3"
+          )}
+        >
           {!projects.length ? <p className="px-1 text-sm text-muted-foreground">No projects yet.</p> : null}
 
-          <ul className="space-y-1.5">
-            {projects.map((project) => {
-              const isActiveProject = project.id === activeProjectId;
-              const isExpanded = expandedProjects[project.id] ?? isActiveProject;
+          {isProjectsSidebarCollapsed ? (
+            <ul className="space-y-2">
+              {projects.map((project) => {
+                const isActiveProject = project.id === activeProjectId;
+                const activeProjectSession = isActiveProject
+                  ? project.sessions.find((session) => session.id === activeSessionId) ?? project.sessions[0] ?? null
+                  : null;
 
-              return (
-                <li key={project.id} className="border-b border-border/80 pb-1 last:border-b-0">
-                  <div className={cn("flex items-center gap-1.5 px-1 py-1.5", isActiveProject && "bg-muted/40")}>
-                    <button
-                      type="button"
-                      className="inline-flex size-7 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:text-foreground"
-                      aria-label={`${isExpanded ? "Collapse" : "Expand"} ${project.name}`}
-                      aria-expanded={isExpanded}
-                      onClick={() => {
-                        setExpandedProjects((previous) => ({
-                          ...previous,
-                          [project.id]: !isExpanded
-                        }));
-                      }}
-                    >
-                      {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
-                    </button>
+                return (
+                  <li key={project.id}>
                     <button
                       type="button"
                       aria-current={isActiveProject ? "page" : undefined}
                       className={cn(
-                        "min-w-0 flex-1 truncate text-left text-sm font-medium transition-colors hover:text-primary",
-                        isActiveProject && "text-primary"
+                        "flex w-full flex-col items-center gap-1 border border-border px-2 py-2 text-center text-[11px] font-medium transition-colors hover:bg-muted/40",
+                        isActiveProject && "border-primary/40 bg-muted/50 text-primary"
                       )}
+                      title={activeProjectSession ? `${project.name} · ${activeProjectSession.name}` : project.name}
                       onClick={() => {
-                        setExpandedProjects((previous) => ({
-                          ...previous,
-                          [project.id]: true
-                        }));
                         setActiveProjectId(project.id);
                         setActiveSessionId(project.id === activeProjectId ? activeSessionId : project.sessions[0]?.id ?? null);
                       }}
                     >
-                      {project.name}
+                      <span className="inline-flex size-9 items-center justify-center border border-border bg-background text-xs font-semibold uppercase tracking-[0.18em]">
+                        {projectCompactLabel(project.name)}
+                      </span>
+                      <span className="w-full truncate text-[10px] text-muted-foreground">{project.sessions.length || 0} sess</span>
                     </button>
-                    <Button
-                      data-testid="new-session-button"
-                      data-project-name={project.name}
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 rounded-none px-2 text-[11px]"
-                      onClick={() => openSessionDialog(project.id)}
-                    >
-                      + Session
-                    </Button>
-                  </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <ul className="space-y-1.5">
+              {projects.map((project) => {
+                const isActiveProject = project.id === activeProjectId;
+                const isExpanded = expandedProjects[project.id] ?? isActiveProject;
 
-                  {isExpanded ? (
-                    project.sessions.length ? (
-                      <div className="ml-4 border-l border-border/80 pl-2">
-                        {project.sessions.map((session) => {
-                          const isActiveSession = session.id === activeSessionId;
+                return (
+                  <li key={project.id} className="border-b border-border/80 pb-1 last:border-b-0">
+                    <div className={cn("flex items-center gap-1.5 px-1 py-1.5", isActiveProject && "bg-muted/40")}>
+                      <button
+                        type="button"
+                        className="inline-flex size-7 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${project.name}`}
+                        aria-expanded={isExpanded}
+                        onClick={() => {
+                          setExpandedProjects((previous) => ({
+                            ...previous,
+                            [project.id]: !isExpanded
+                          }));
+                        }}
+                      >
+                        {isExpanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+                      </button>
+                      <button
+                        type="button"
+                        aria-current={isActiveProject ? "page" : undefined}
+                        className={cn(
+                          "min-w-0 flex-1 truncate text-left text-sm font-medium transition-colors hover:text-primary",
+                          isActiveProject && "text-primary"
+                        )}
+                        onClick={() => {
+                          setExpandedProjects((previous) => ({
+                            ...previous,
+                            [project.id]: true
+                          }));
+                          setActiveProjectId(project.id);
+                          setActiveSessionId(project.id === activeProjectId ? activeSessionId : project.sessions[0]?.id ?? null);
+                        }}
+                      >
+                        {project.name}
+                      </button>
+                      <Button
+                        data-testid="new-session-button"
+                        data-project-name={project.name}
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 rounded-none px-2 text-[11px]"
+                        onClick={() => openSessionDialog(project.id)}
+                      >
+                        + Session
+                      </Button>
+                    </div>
 
-                          return (
-                            <button
-                              data-testid="session-row"
-                              data-session-name={session.name}
-                              data-session-status={session.status}
-                              type="button"
-                              key={session.id}
-                              className={cn(
-                                "mt-1 flex w-full items-center justify-between gap-3 px-2 py-2 text-left transition-colors hover:bg-muted/50",
-                                isActiveSession && "bg-muted/50"
-                              )}
-                              onClick={() => {
-                                setExpandedProjects((previous) => ({
-                                  ...previous,
-                                  [project.id]: true
-                                }));
-                                setActiveProjectId(project.id);
-                                setActiveSessionId(session.id);
-                              }}
-                            >
-                              <span className="min-w-0 flex-1 truncate text-sm font-medium">{session.name}</span>
-                              <Badge variant={sessionStatusVariant(session)} className="shrink-0 rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
-                                {session.status}
-                              </Badge>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="ml-4 border-l border-border/80 px-2 py-2 text-xs text-muted-foreground">No sessions yet.</div>
-                    )
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
+                    {isExpanded ? (
+                      project.sessions.length ? (
+                        <div className="ml-4 border-l border-border/80 pl-2">
+                          {project.sessions.map((session) => {
+                            const isActiveSession = session.id === activeSessionId;
+
+                            return (
+                              <button
+                                data-testid="session-row"
+                                data-session-name={session.name}
+                                data-session-status={session.status}
+                                type="button"
+                                key={session.id}
+                                className={cn(
+                                  "mt-1 flex w-full items-center justify-between gap-3 px-2 py-2 text-left transition-colors hover:bg-muted/50",
+                                  isActiveSession && "bg-muted/50"
+                                )}
+                                onClick={() => {
+                                  setExpandedProjects((previous) => ({
+                                    ...previous,
+                                    [project.id]: true
+                                  }));
+                                  setActiveProjectId(project.id);
+                                  setActiveSessionId(session.id);
+                                }}
+                              >
+                                <span className="min-w-0 flex-1 truncate text-sm font-medium">{session.name}</span>
+                                <Badge variant={sessionStatusVariant(session)} className="shrink-0 rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                                  {session.status}
+                                </Badge>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="ml-4 border-l border-border/80 px-2 py-2 text-xs text-muted-foreground">No sessions yet.</div>
+                      )
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </nav>
+
+        {isProjectsSidebarCollapsed ? (
+          <div className="border-t border-border px-2 py-2 md:block">
+            <div className="border border-border bg-background px-2 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+              <div className="truncate text-foreground">{activeProject?.name ?? "No project"}</div>
+              <div className="mt-1 truncate">{activeSession?.name ?? "No session"}</div>
+            </div>
+          </div>
+        ) : null}
       </aside>
 
       <section className="flex h-full min-h-0 flex-1 overflow-hidden">
@@ -1584,13 +1767,13 @@ export default function App() {
             </>
           ) : (
             <>
-              <div className="border-b border-border px-4 py-4">
-                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="relative min-w-0 space-y-2">
-                    <span data-testid="active-session-label" className="block text-lg font-semibold tracking-tight">
+              <div className="border-b border-border px-4 py-3 lg:py-2.5">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 space-y-2 lg:flex lg:items-center lg:gap-3 lg:space-y-0">
+                    <span data-testid="active-session-label" className="block truncate text-base font-semibold tracking-tight lg:text-[15px]">
                       Session: {activeSession.name}
                     </span>
-                    <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5 lg:flex-nowrap">
                       <Badge variant="outline" className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
                         {activeProject?.name}
                       </Badge>
@@ -1603,7 +1786,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                     <Button
                       data-testid="start-session-button"
                       type="button"
@@ -1633,7 +1816,8 @@ export default function App() {
                       size="sm"
                       variant="outline"
                       className="rounded-none px-3"
-                      onClick={() => setIsPanelDialogOpen(true)}
+                      onClick={openPanelDialog}
+                      title="Add panel (Ctrl+Alt+N)"
                     >
                       [+ New Panel]
                     </Button>
@@ -1737,7 +1921,7 @@ export default function App() {
                     <div className="max-w-sm space-y-3">
                       <p className="text-base font-semibold">No panels open</p>
                       <p className="text-sm text-muted-foreground">Use `[+ New Panel]` to add Agent, Files, Terminal, Git, or Browser panels. Editor panels open from Files.</p>
-                      <Button type="button" size="sm" variant="outline" className="rounded-none" onClick={() => setIsPanelDialogOpen(true)}>
+                      <Button type="button" size="sm" variant="outline" className="rounded-none" onClick={openPanelDialog} title="Add panel (Ctrl+Alt+N)">
                         [+ New Panel]
                       </Button>
                     </div>
