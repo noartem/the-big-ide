@@ -1,0 +1,41 @@
+
+Running 1 test using 1 worker
+
+  ✘  1 [chromium] › e2e/.tmp-workspace-panel-polish-ac9.spec.ts:61:1 › repro AC9 drag reorder after resize (19.8s)
+
+
+  1) [chromium] › e2e/.tmp-workspace-panel-polish-ac9.spec.ts:61:1 › repro AC9 drag reorder after resize 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeLessThan[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: < [32m0[39m
+    Received:   [31m2[39m
+
+      109 |     `expected browser to move before files after drag reorder, got ${JSON.stringify({ panelOrder, filesX, browserX })}`
+      110 |   ).toEqual(expect.objectContaining({ browserX: expect.any(Number), filesX: expect.any(Number) }));
+    > 111 |   expect(panelOrder.indexOf("browser")).toBeLessThan(panelOrder.indexOf("files"));
+          |                                         ^
+      112 | });
+      113 |
+        at /home/noartem/Projects/big/e2e/.tmp-workspace-panel-polish-ac9.spec.ts:111:41
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/.tmp-workspace-panel-polis-19619-9-drag-reorder-after-resize-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/.tmp-workspace-panel-polis-19619-9-drag-reorder-after-resize-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/.tmp-workspace-panel-polis-19619-9-drag-reorder-after-resize-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/.tmp-workspace-panel-polis-19619-9-drag-reorder-after-resize-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/.tmp-workspace-panel-polis-19619-9-drag-reorder-after-resize-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › e2e/.tmp-workspace-panel-polish-ac9.spec.ts:61:1 › repro AC9 drag reorder after resize 

@@ -1,0 +1,24 @@
+1536:                         <Badge variant={agentStatusVariant(activeSession.agentStatus)} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+1537:                           OpenCode {formatAgentStatus(activeSession.agentStatus)}
+1538:                         </Badge>
+1539:                         <Badge variant="outline" className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]" data-testid="session-sandbox-mode">
+1540:                           sandbox {activeSandboxMode}
+1541:                         </Badge>
+1542:                         <Badge variant={boot?.docker.available ? "success" : "warning"} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+---
+1545:                       </div>
+1546:                     </div>
+1547: 
+1548:                     <div data-testid="session-runtime-context" className="grid gap-1 text-xs text-muted-foreground">
+1549:                       <span>workspace {toRelativePathLabel(activeSession.workdir, activeSession.workdir)}</span>
+1550:                       <span>
+1551:                         {boot?.runtimeTarget ?? "unknown"} runtime - {activeSession.agentRuntime?.message || "OpenCode not started"}
+---
+1551:                         {boot?.runtimeTarget ?? "unknown"} runtime - {activeSession.agentRuntime?.message || "OpenCode not started"}
+1552:                       </span>
+1553:                       {activeAgentUrl ? (
+1554:                         <span data-testid="session-agent-url" className="truncate">
+1555:                           {activeAgentUrl}
+1556:                         </span>
+1557:                       ) : null}
+---

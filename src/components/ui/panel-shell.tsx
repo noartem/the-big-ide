@@ -7,7 +7,7 @@ import { Button } from "./button";
 
 interface PanelShellProps {
   title: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   className?: string;
   actions?: ReactNode;
   onExpand?: () => void;
@@ -20,7 +20,7 @@ export function PanelShell({ title, subtitle, actions, onExpand, className, chil
       <header className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
         <div className="min-w-0">
           <h3 className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</h3>
-          {subtitle ? <p className="truncate text-xs text-muted-foreground/80">{subtitle}</p> : null}
+          {subtitle ? <div className="truncate text-xs text-muted-foreground/80">{subtitle}</div> : null}
         </div>
 
         <div className="flex items-center gap-px">

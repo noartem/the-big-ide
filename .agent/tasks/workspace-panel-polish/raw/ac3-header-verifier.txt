@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › e2e/.tmp-workspace-panel-polish-ac3.spec.ts:56:1 › active session header removes retired metadata nodes (12.1s)
+
+  1 passed (17.5s)

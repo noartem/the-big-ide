@@ -1,0 +1,6 @@
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › e2e/workspace-panel-polish.spec.ts:62:1 › panel drag reorder still works after resize and horizontal scroll (19.3s)
+
+  1 passed (24.7s)

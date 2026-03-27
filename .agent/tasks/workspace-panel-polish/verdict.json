@@ -1,0 +1,102 @@
+{
+  "task_id": "workspace-panel-polish",
+  "verified_at": "2026-03-27T18:37:22+05:00",
+  "overall_verdict": "PASS",
+  "criteria": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1433-1551` now renders the left side as only the title/new-project header plus the scrolling project/session navigation area, with no extra footer or sidebar status chrome outside that navigation region."
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1462-1545` keeps project expand/collapse and `new-session-button`, while each `session-row` is reduced to the session name plus one status badge; the lifecycle flow still passed in `e2e/usage-recordings.spec.ts:127-141`."
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1587-1640` keeps only `active-session-label`, the Start/Stop/New Panel controls, one project chip, and the current session/agent chips, and fresh repo inspection found no remaining `session-runtime-context`, `session-sandbox-mode`, or `session-agent-url` nodes; `e2e/usage-recordings.spec.ts:135-137` and `:183-185` now pass their absence checks."
+    },
+    {
+      "id": "AC4",
+      "status": "PASS",
+      "reason": "`src/styles.css:30-34` and `src/App.tsx:1433-1453` plus `:1554-1649` constrain the shell to full height and route scrolling into inner regions, and a fresh 1440x900 Playwright verifier measured `pageScrollHeight=900`, `viewportHeight=900`, `overflowX=auto`, and `overflowY=hidden` for `session-panel-scroll-region`."
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "reason": "`src/App.tsx:402-420` and `:730-770` focus or create the matching editor, call `scrollPanelIntoView` on that editor panel, and prevent duplicate editor panels for the same file; `e2e/usage-recordings.spec.ts:247-264` passed the one-editor-per-file flow and updated `editor-active-path` on reopen/switch."
+    },
+    {
+      "id": "AC6",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1143-1169` keeps the editor title, visible `editor-active-path`, and save/close controls in the main header, while `src/components/editor-panel.tsx:57-74` renders only the scroll-contained editor body with no duplicate lower path/status strip; the editor-open regression still passed in `e2e/usage-recordings.spec.ts:252-255` and `:263-264`."
+    },
+    {
+      "id": "AC7",
+      "status": "PASS",
+      "reason": "`src/App.tsx:1196-1210`, `src/components/terminal-panel.tsx:21-110`, and `server/web-backend.js:1019-1123` keep the terminal full-height, theme-backed with solid `bg-card`, started via the existing terminal API, resized via `ResizeObserver`, and stopped through the current session terminal stop path; a fresh Playwright verifier confirmed xterm mounted, the terminal background resolved to `rgb(255, 255, 255)`, and typed input was echoed back through the live integration."
+    },
+    {
+      "id": "AC8",
+      "status": "PASS",
+      "reason": "`src/App.tsx:98-113`, `:279-280`, `:708-716`, and `:1333-1379` drive browser navigation entirely from the top URL row, normalize URLs, submit on Enter, and render `web-open-button` only when the normalized draft differs from the loaded URL; a fresh Playwright verifier navigated by pressing Enter, saw the iframe load `http://localhost:43111/api/health`, then confirmed the button disappeared until the draft changed again."
+    },
+    {
+      "id": "AC9",
+      "status": "PASS",
+      "reason": "`src/App.tsx:210`, `:386-397`, `:906-948`, `:1034-1050`, and `:1651-1730` keep per-session width state, pointer-driven resizing, focus retention, and drag/drop ordering in the panel rail; `e2e/workspace-panel-polish.spec.ts:62-116` passed the resize-plus-horizontal-scroll reorder regression, while `e2e/usage-recordings.spec.ts:116-121`, `:247-319`, and the fresh terminal/browser verifier showed close, file-open, browser, and terminal flows still working in the same session."
+    }
+  ],
+  "commands_run": [
+    {
+      "command": "npm run typecheck",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "`tsc --noEmit` completed without errors."
+    },
+    {
+      "command": "npm run build",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "`vite build` succeeded; Vite emitted only the existing non-failing chunk-size warning."
+    },
+    {
+      "command": "npm run test:e2e -- e2e/usage-recordings.spec.ts",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "Playwright ran the 3 usage-recording regressions and all passed."
+    },
+    {
+      "command": "npm run test:e2e -- e2e/workspace-panel-polish.spec.ts",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "Playwright passed the panel resize + horizontal-scroll drag-reorder regression."
+    },
+    {
+      "command": "node --input-type=module -e \"<focused Playwright verifier>\"",
+      "status": "PASS",
+      "exit_code": 0,
+      "notes": "A fresh host-mode verifier created a session at 1440x900, confirmed there was no page-level vertical overflow, verified the terminal mounted with a solid theme background and echoed typed input, and verified Enter-based browser navigation plus the conditional `web-open-button` behavior."
+    }
+  ],
+  "artifacts_used": [
+    ".agent/tasks/workspace-panel-polish/spec.md",
+    ".agent/tasks/workspace-panel-polish/evidence.md",
+    ".agent/tasks/workspace-panel-polish/evidence.json",
+    "src/App.tsx",
+    "src/components/editor-panel.tsx",
+    "src/components/file-tree.tsx",
+    "src/components/terminal-panel.tsx",
+    "src/components/ui/panel-shell.tsx",
+    "src/styles.css",
+    "server/web-backend.js",
+    "e2e/usage-recordings.spec.ts",
+    "e2e/workspace-panel-polish.spec.ts"
+  ],
+  "caveats": [
+    "AC1-AC3 and part of AC5-AC7 rely on current source inspection alongside the fresh passing Playwright coverage, because the existing automated suite does not snapshot every visual simplification directly.",
+    "The focused verifier was run as an inline Playwright/Node harness instead of a checked-in spec file to avoid modifying production or evidence files during verification."
+  ]
+}

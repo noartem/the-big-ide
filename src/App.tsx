@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, type PointerEvent as ReactPointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, GitBranch, GitCommitHorizontal, Globe, GripHorizontal, Play, RefreshCcw, Save, Square, X } from "lucide-react";
 
 import { AgentPanel } from "@/components/agent-panel";
@@ -11,10 +11,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { PanelShell } from "@/components/ui/panel-shell";
 import { cn } from "@/lib/utils";
-import type { BootstrapPayload, FileNode, GitStatusEntry, GitStatusSnapshot, PanelId, Project, Session } from "@/types/big-ide";
+import type { FileNode, GitStatusEntry, GitStatusSnapshot, PanelId, Project, Session } from "@/types/big-ide";
 
 const PROJECTS_CHANGED_EVENT = "bigide:projects-changed";
 const DEFAULT_BROWSER_URL = "http://localhost:3000";
+const PANEL_MIN_WIDTH = 320;
+const PANEL_MAX_WIDTH = 960;
 
 type BadgeVariant = "default" | "secondary" | "outline" | "success" | "warning" | "danger";
 type SessionPanelKind = Exclude<PanelId, "projects">;
@@ -172,7 +174,6 @@ function movePanel<T>(items: T[], fromIndex: number, toIndex: number) {
 }
 
 export default function App() {
-  const [boot, setBoot] = useState<BootstrapPayload | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -206,8 +207,17 @@ export default function App() {
   const [webDraftUrl, setWebDraftUrl] = useState(DEFAULT_BROWSER_URL);
   const [webUrl, setWebUrl] = useState("about:blank");
   const [webState, setWebState] = useState<"idle" | "loading" | "loaded" | "error">("idle");
+  const [panelWidthsBySession, setPanelWidthsBySession] = useState<Record<string, Record<string, number>>>({});
+  const [resizingPanelId, setResizingPanelId] = useState<string | null>(null);
 
   const panelRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const panelResizeStateRef = useRef<{
+    panelId: string;
+    sessionId: string;
+    startWidth: number;
+    startX: number;
+  } | null>(null);
+  const draggedPanelIdRef = useRef<string | null>(null);
 
   const activeProject = useMemo(
     () => projects.find((project) => project.id === activeProjectId) ?? null,
@@ -259,7 +269,15 @@ export default function App() {
   }, [activeEditorPanel, activeSession, editorStateBySession]);
 
   const activeAgentUrl = useMemo(() => getAgentChatUrl(activeSession), [activeSession]);
-  const activeSandboxMode = activeSession?.sandboxRuntime?.mode ?? activeProject?.sandbox.mode ?? "pending";
+  const activePanelWidths = useMemo(() => {
+    if (!activeSession) {
+      return {};
+    }
+
+    return panelWidthsBySession[activeSession.id] ?? {};
+  }, [activeSession, panelWidthsBySession]);
+  const normalizedWebDraftUrl = useMemo(() => normalizeWebUrl(webDraftUrl), [webDraftUrl]);
+  const showWebOpenButton = normalizedWebDraftUrl !== webUrl;
 
   const refreshProjects = useCallback(async () => {
     if (!window.bigIDE) {
@@ -283,7 +301,6 @@ export default function App() {
 
     try {
       const payload = await window.bigIDE.bootstrap();
-      setBoot(payload);
       setProjects(payload.projects);
       setInfoMessage("Workspace ready");
       setErrorMessage("");
@@ -365,9 +382,42 @@ export default function App() {
           [sessionId]: nextFocus?.id ?? null
         };
       });
+
+      setPanelWidthsBySession((previous) => {
+        const sessionWidths = previous[sessionId];
+        if (!sessionWidths || !(panelId in sessionWidths)) {
+          return previous;
+        }
+
+        const { [panelId]: _removedWidth, ...nextSessionWidths } = sessionWidths;
+        return {
+          ...previous,
+          [sessionId]: nextSessionWidths
+        };
+      });
     },
     [panelInstancesBySession]
   );
+
+  const scrollPanelIntoView = useCallback((panelId: string) => {
+    const tryScroll = (remainingAttempts: number) => {
+      const panelNode = panelRefs.current[panelId];
+      if (panelNode) {
+        panelNode.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "center"
+        });
+        return;
+      }
+
+      if (remainingAttempts > 0) {
+        window.requestAnimationFrame(() => tryScroll(remainingAttempts - 1));
+      }
+    };
+
+    window.requestAnimationFrame(() => tryScroll(4));
+  }, []);
 
   const saveEditorFile = useCallback(
     async (filePath: string) => {
@@ -658,12 +708,11 @@ export default function App() {
   const openWebView = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      const normalized = normalizeWebUrl(webDraftUrl);
-      setWebDraftUrl(normalized);
-      setWebUrl(normalized);
-      setWebState(normalized === "about:blank" ? "idle" : "loading");
+      setWebDraftUrl(normalizedWebDraftUrl);
+      setWebUrl(normalizedWebDraftUrl);
+      setWebState(normalizedWebDraftUrl === "about:blank" ? "idle" : "loading");
     },
-    [webDraftUrl]
+    [normalizedWebDraftUrl]
   );
 
   const addPanelToActiveSession = useCallback(
@@ -695,13 +744,15 @@ export default function App() {
 
       if (existingPanel) {
         focusPanel(activeSession.id, existingPanel.id);
+        scrollPanelIntoView(existingPanel.id);
         setErrorMessage("");
         return;
       }
 
       const existingBuffer = editorStateBySession[activeSession.id]?.buffers[filePath];
       if (existingBuffer) {
-        appendPanel(activeSession.id, "editor", filePath);
+        const panel = appendPanel(activeSession.id, "editor", filePath);
+        scrollPanelIntoView(panel.id);
         setErrorMessage("");
         return;
       }
@@ -715,13 +766,14 @@ export default function App() {
             [filePath]: { value: content, dirty: false }
           }
         }));
-        appendPanel(activeSession.id, "editor", filePath);
+        const panel = appendPanel(activeSession.id, "editor", filePath);
+        scrollPanelIntoView(panel.id);
         setErrorMessage("");
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : "Failed to open file");
       }
     },
-    [activeSession, appendPanel, editorStateBySession, focusPanel, panelInstancesBySession, setSessionEditorState]
+    [activeSession, appendPanel, editorStateBySession, focusPanel, panelInstancesBySession, scrollPanelIntoView, setSessionEditorState]
   );
 
   const moveSessionPanel = useCallback(
@@ -843,16 +895,58 @@ export default function App() {
       return;
     }
 
-    const frame = window.requestAnimationFrame(() => {
-      panelRefs.current[activeFocusedPanelId]?.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-        inline: "center"
-      });
-    });
+    scrollPanelIntoView(activeFocusedPanelId);
+  }, [activeFocusedPanelId, activePanels, activeSession, scrollPanelIntoView]);
 
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeFocusedPanelId, activeSession]);
+  useEffect(() => {
+    if (!resizingPanelId) {
+      return;
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const currentResize = panelResizeStateRef.current;
+      if (!currentResize) {
+        return;
+      }
+
+      const nextWidth = Math.min(PANEL_MAX_WIDTH, Math.max(PANEL_MIN_WIDTH, currentResize.startWidth + event.clientX - currentResize.startX));
+      setPanelWidthsBySession((previous) => {
+        const sessionWidths = previous[currentResize.sessionId] ?? {};
+        if (sessionWidths[currentResize.panelId] === nextWidth) {
+          return previous;
+        }
+
+        return {
+          ...previous,
+          [currentResize.sessionId]: {
+            ...sessionWidths,
+            [currentResize.panelId]: nextWidth
+          }
+        };
+      });
+    };
+
+    const stopResizing = () => {
+      panelResizeStateRef.current = null;
+      setResizingPanelId(null);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+    window.addEventListener("blur", stopResizing);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+      window.removeEventListener("blur", stopResizing);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [resizingPanelId]);
 
   useEffect(() => {
     setIsCommitDialogOpen(false);
@@ -937,6 +1031,24 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeEditorPanel, activeProjectId, cycleSession, openSessionDialog, saveEditorFile]);
 
+  const startPanelResize = useCallback((event: ReactPointerEvent<HTMLButtonElement>, sessionId: string, panelId: string) => {
+    const panelNode = panelRefs.current[panelId];
+    if (!panelNode) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    panelResizeStateRef.current = {
+      panelId,
+      sessionId,
+      startWidth: panelNode.getBoundingClientRect().width,
+      startX: event.clientX
+    };
+    setResizingPanelId(panelId);
+  }, []);
+
   const renderDragHandle = useCallback(
     (label: string) => (
       <span className="inline-flex size-7 items-center justify-center text-muted-foreground" aria-hidden="true" title={`Drag ${label} panel`}>
@@ -997,7 +1109,6 @@ export default function App() {
           return (
             <PanelShell
               title="Files"
-              subtitle={toRelativePathLabel(activeSession.workdir, activeSession.workdir)}
               className="h-full min-h-0"
               actions={
                 <>
@@ -1031,7 +1142,11 @@ export default function App() {
           return (
             <PanelShell
               title={editorFilePath ? fileLabel(editorFilePath) : "Editor"}
-              subtitle={editorFilePath ? toRelativePathLabel(activeSession.workdir, editorFilePath) : "Open files from the Files panel."}
+              subtitle={
+                <span {...(isFocusedEditor ? { "data-testid": "editor-active-path" } : {})}>
+                  {editorFilePath ? toRelativePathLabel(activeSession.workdir, editorFilePath) : "Open files from the Files panel."}
+                </span>
+              }
               className="h-full min-h-0"
               actions={
                 <>
@@ -1051,40 +1166,27 @@ export default function App() {
                 </>
               }
             >
-              <div className="flex h-full min-h-0 flex-col">
-                <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
-                  <span {...(isFocusedEditor ? { "data-testid": "editor-active-path" } : {})} className="truncate">
-                    {editorFilePath ? toRelativePathLabel(activeSession.workdir, editorFilePath) : "Open a file from the Files panel."}
-                  </span>
-                  {editorFilePath ? (
-                    <Badge variant={editorBuffer?.dirty ? "warning" : "outline"} className="rounded-none px-2 py-0">
-                      {editorBuffer?.dirty ? "unsaved" : "saved"}
-                    </Badge>
-                  ) : null}
-                </div>
+              <div className="min-h-0 flex-1 overflow-hidden">
+                <EditorPanel
+                  filePath={editorFilePath}
+                  value={editorBuffer?.value ?? ""}
+                  onChange={(value) => {
+                    if (!editorFilePath) {
+                      return;
+                    }
 
-                <div className="min-h-0 flex-1 overflow-hidden">
-                  <EditorPanel
-                    filePath={editorFilePath}
-                    value={editorBuffer?.value ?? ""}
-                    onChange={(value) => {
-                      if (!editorFilePath) {
-                        return;
-                      }
-
-                      setSessionEditorState(activeSession.id, (current) => ({
-                        ...current,
-                        buffers: {
-                          ...current.buffers,
-                          [editorFilePath]: {
-                            value,
-                            dirty: true
-                          }
+                    setSessionEditorState(activeSession.id, (current) => ({
+                      ...current,
+                      buffers: {
+                        ...current.buffers,
+                        [editorFilePath]: {
+                          value,
+                          dirty: true
                         }
-                      }));
-                    }}
-                  />
-                </div>
+                      }
+                    }));
+                  }}
+                />
               </div>
             </PanelShell>
           );
@@ -1102,7 +1204,7 @@ export default function App() {
                 </>
               }
             >
-              <div className="h-full min-h-0 bg-[#f8f4ea]">
+              <div className="h-full min-h-0 bg-card">
                 <TerminalPanel session={activeSession} />
               </div>
             </PanelShell>
@@ -1230,7 +1332,6 @@ export default function App() {
           return (
             <PanelShell
               title="Browser"
-              subtitle="Open a local or remote target in-session."
               className="h-full min-h-0"
               actions={
                 <>
@@ -1248,45 +1349,17 @@ export default function App() {
                     placeholder={DEFAULT_BROWSER_URL}
                     className="rounded-none"
                   />
-                  <Button data-testid="web-open-button" type="submit" className="rounded-none">
-                    <Globe className="mr-2 size-4" />
-                    Open
-                  </Button>
+                  {showWebOpenButton ? (
+                    <Button data-testid="web-open-button" type="submit" className="rounded-none">
+                      <Globe className="mr-2 size-4" />
+                      Go
+                    </Button>
+                  ) : null}
                 </form>
 
-                <div className="flex flex-wrap gap-px border-b border-border p-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="rounded-none"
-                    onClick={() => {
-                      setWebDraftUrl(DEFAULT_BROWSER_URL);
-                      setWebUrl(DEFAULT_BROWSER_URL);
-                      setWebState("loading");
-                    }}
-                  >
-                    localhost:3000
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="rounded-none"
-                    onClick={() => {
-                      const healthUrl = "http://127.0.0.1:43111/api/health";
-                      setWebDraftUrl(healthUrl);
-                      setWebUrl(healthUrl);
-                      setWebState("loading");
-                    }}
-                  >
-                    health
-                  </Button>
-                </div>
-
-                <div data-testid="web-status" className="border-b border-border px-3 py-2 text-sm text-muted-foreground">
+                <span data-testid="web-status" className="sr-only">
                   status: {webState}
-                </div>
+                </span>
 
                 {webUrl === "about:blank" ? (
                   <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-sm text-muted-foreground">
@@ -1330,6 +1403,7 @@ export default function App() {
       selectedGitEntry,
       selectedGitPath,
       setSessionEditorState,
+      showWebOpenButton,
       stageGitSelection,
       treeLoading,
       treeNodes,
@@ -1353,10 +1427,11 @@ export default function App() {
   }
 
   const sessionCreationProject = projects.find((project) => project.id === sessionCreationProjectId) ?? null;
+  const statusNotice = errorMessage || (infoMessage !== "Workspace ready" && infoMessage !== "Initializing workspace..." ? infoMessage : "");
 
   return (
     <main className="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground md:flex-row">
-      <aside className="flex min-h-0 w-full flex-col border-b border-border bg-card md:w-[20rem] md:min-w-[20rem] md:border-b-0 md:border-r">
+      <aside className="flex h-full min-h-0 w-full flex-col border-b border-border bg-card md:w-[20rem] md:min-w-[20rem] md:border-b-0 md:border-r">
         <div className="border-b border-border px-4 py-3">
           <div className="flex items-center justify-between gap-3">
             <h1 data-testid="workspace-app-title" className="truncate text-lg font-semibold tracking-tight">
@@ -1373,14 +1448,9 @@ export default function App() {
               [+ New Project]
             </Button>
           </div>
-          {errorMessage ? (
-            <p role="alert" className="mt-2 text-sm text-destructive">
-              {errorMessage}
-            </p>
-          ) : null}
         </div>
 
-        <nav aria-label="Projects and sessions" className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <nav aria-label="Projects and sessions" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
           {!projects.length ? <p className="px-1 text-sm text-muted-foreground">No projects yet.</p> : null}
 
           <ul className="space-y-1.5">
@@ -1390,7 +1460,7 @@ export default function App() {
 
               return (
                 <li key={project.id} className="border-b border-border/80 pb-1 last:border-b-0">
-                  <div className={cn("flex items-center gap-1 px-1 py-1", isActiveProject && "bg-muted/40")}>
+                  <div className={cn("flex items-center gap-1.5 px-1 py-1.5", isActiveProject && "bg-muted/40")}>
                     <button
                       type="button"
                       className="inline-flex size-7 shrink-0 items-center justify-center rounded-none text-muted-foreground transition-colors hover:text-foreground"
@@ -1423,9 +1493,6 @@ export default function App() {
                     >
                       {project.name}
                     </button>
-                    <Badge variant="outline" className="rounded-none px-1.5 py-0 text-[10px] uppercase tracking-[0.12em]">
-                      {project.sessions.length}
-                    </Badge>
                     <Button
                       data-testid="new-session-button"
                       data-project-name={project.name}
@@ -1453,7 +1520,7 @@ export default function App() {
                               type="button"
                               key={session.id}
                               className={cn(
-                                "mt-1 flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors hover:bg-muted/50",
+                                "mt-1 flex w-full items-center justify-between gap-3 px-2 py-2 text-left transition-colors hover:bg-muted/50",
                                 isActiveSession && "bg-muted/50"
                               )}
                               onClick={() => {
@@ -1465,13 +1532,10 @@ export default function App() {
                                 setActiveSessionId(session.id);
                               }}
                             >
-                              <span className={cn("size-1.5 shrink-0 rounded-full", session.status === "running" ? "bg-emerald-500" : "bg-muted-foreground")} />
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-medium">{session.name}</span>
-                                <span className="block truncate text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                                  {session.status} - {formatAgentStatus(session.agentStatus)}
-                                </span>
-                              </span>
+                              <span className="min-w-0 flex-1 truncate text-sm font-medium">{session.name}</span>
+                              <Badge variant={sessionStatusVariant(session)} className="shrink-0 rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                                {session.status}
+                              </Badge>
                             </button>
                           );
                         })}
@@ -1485,14 +1549,15 @@ export default function App() {
             })}
           </ul>
         </nav>
-
-        <div className={cn("border-t border-border px-4 py-3 text-xs", errorMessage ? "text-destructive" : "text-muted-foreground")}>
-          {errorMessage || infoMessage || boot?.workspaceRoot || "Workspace ready"}
-        </div>
       </aside>
 
-      <section className="min-h-0 flex-1 overflow-hidden">
-        <div data-testid="session-panel-area" className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <section className="flex h-full min-h-0 flex-1 overflow-hidden">
+        <div data-testid="session-panel-area" className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-background">
+          {statusNotice ? (
+            <div className={cn("border-b border-border px-4 py-2 text-sm", errorMessage ? "text-destructive" : "text-muted-foreground")}>
+              {statusNotice}
+            </div>
+          ) : null}
           {!activeSession ? (
             <>
               <div className="border-b border-border px-4 py-4">
@@ -1520,41 +1585,21 @@ export default function App() {
           ) : (
             <>
               <div className="border-b border-border px-4 py-4">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="min-w-0 space-y-3">
-                    <div>
-                      <span data-testid="active-session-label" className="block text-lg font-semibold tracking-tight">
-                        Session: {activeSession.name}
-                      </span>
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <Badge variant="outline" className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
-                          {activeProject?.name}
-                        </Badge>
-                        <Badge variant={sessionStatusVariant(activeSession)} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
-                          {activeSession.status}
-                        </Badge>
-                        <Badge variant={agentStatusVariant(activeSession.agentStatus)} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
-                          OpenCode {formatAgentStatus(activeSession.agentStatus)}
-                        </Badge>
-                        <Badge variant="outline" className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]" data-testid="session-sandbox-mode">
-                          sandbox {activeSandboxMode}
-                        </Badge>
-                        <Badge variant={boot?.docker.available ? "success" : "warning"} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
-                          {boot?.docker.available ? "docker ready" : "docker unavailable"}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    <div data-testid="session-runtime-context" className="grid gap-1 text-xs text-muted-foreground">
-                      <span>workspace {toRelativePathLabel(activeSession.workdir, activeSession.workdir)}</span>
-                      <span>
-                        {boot?.runtimeTarget ?? "unknown"} runtime - {activeSession.agentRuntime?.message || "OpenCode not started"}
-                      </span>
-                      {activeAgentUrl ? (
-                        <span data-testid="session-agent-url" className="truncate">
-                          {activeAgentUrl}
-                        </span>
-                      ) : null}
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                  <div className="relative min-w-0 space-y-2">
+                    <span data-testid="active-session-label" className="block text-lg font-semibold tracking-tight">
+                      Session: {activeSession.name}
+                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline" className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                        {activeProject?.name}
+                      </Badge>
+                      <Badge variant={sessionStatusVariant(activeSession)} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                        {activeSession.status}
+                      </Badge>
+                      <Badge variant={agentStatusVariant(activeSession.agentStatus)} className="rounded-none px-2 py-0 text-[10px] uppercase tracking-[0.12em]">
+                        OpenCode {formatAgentStatus(activeSession.agentStatus)}
+                      </Badge>
                     </div>
                   </div>
 
@@ -1598,51 +1643,92 @@ export default function App() {
 
               <div className="min-h-0 flex-1 overflow-hidden px-3 py-3">
                 {activePanels.length ? (
-                  <div data-testid="session-panel-scroll-region" className="h-full min-h-0 overflow-auto overscroll-contain">
+                  <div data-testid="session-panel-scroll-region" className="h-full min-h-0 overflow-x-auto overflow-y-hidden overscroll-contain">
                     <div
                       data-testid="session-panel-rail"
-                      className="flex min-h-full w-max min-w-full flex-nowrap items-stretch gap-3 pb-2 pr-3"
+                      className="flex h-full w-max min-w-full flex-nowrap items-stretch gap-3 pr-3"
                     >
                       {activePanels.map((panel) => (
-                      <div
-                        data-testid="session-panel"
-                        data-panel-id={panel.kind}
-                        data-file-path={panel.filePath ?? undefined}
-                        key={panel.id}
-                        ref={(node) => {
-                          panelRefs.current[panel.id] = node;
-                        }}
-                        draggable
-                        onClick={() => focusPanel(activeSession.id, panel.id)}
-                        onDragStart={() => {
-                          setDraggedPanelId(panel.id);
-                          focusPanel(activeSession.id, panel.id);
-                        }}
-                        onDragOver={(event) => {
-                          if (!draggedPanelId || draggedPanelId === panel.id) {
-                            return;
-                          }
+                        <div
+                          data-testid="session-panel"
+                          data-panel-id={panel.kind}
+                          data-file-path={panel.filePath ?? undefined}
+                          key={panel.id}
+                          ref={(node) => {
+                            panelRefs.current[panel.id] = node;
+                          }}
+                          draggable
+                          onClick={() => focusPanel(activeSession.id, panel.id)}
+                          onDragStart={(event) => {
+                            if ((event.target as HTMLElement).closest('[data-panel-resize-handle="true"]')) {
+                              event.preventDefault();
+                              return;
+                            }
 
-                          event.preventDefault();
-                        }}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          if (!draggedPanelId || draggedPanelId === panel.id) {
-                            return;
-                          }
+                            draggedPanelIdRef.current = panel.id;
+                            event.dataTransfer.effectAllowed = "move";
+                            event.dataTransfer.setData("text/plain", panel.id);
+                            setDraggedPanelId(panel.id);
+                            focusPanel(activeSession.id, panel.id);
+                          }}
+                          onDragEnter={(event) => {
+                            const sourcePanelId = draggedPanelIdRef.current;
+                            if (!sourcePanelId || sourcePanelId === panel.id) {
+                              return;
+                            }
 
-                          moveSessionPanel(activeSession.id, draggedPanelId, panel.id);
-                          setDraggedPanelId(null);
-                        }}
-                        onDragEnd={() => setDraggedPanelId(null)}
-                        className={cn(
-                          "h-full min-h-0 w-[22rem] shrink-0 sm:w-[24rem] lg:w-[28rem] xl:w-[30rem]",
-                          panel.id === activeFocusedPanelId && "ring-2 ring-primary/25 ring-offset-2 ring-offset-background",
-                          draggedPanelId === panel.id && "opacity-70"
-                        )}
-                      >
-                        {renderPanel(panel)}
-                      </div>
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                          }}
+                          onDragOver={(event) => {
+                            const sourcePanelId = draggedPanelIdRef.current;
+                            if (!sourcePanelId || sourcePanelId === panel.id) {
+                              return;
+                            }
+
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = "move";
+                          }}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const sourcePanelId = event.dataTransfer.getData("text/plain") || draggedPanelIdRef.current;
+                            if (!sourcePanelId || sourcePanelId === panel.id) {
+                              return;
+                            }
+
+                            moveSessionPanel(activeSession.id, sourcePanelId, panel.id);
+                            draggedPanelIdRef.current = null;
+                            setDraggedPanelId(null);
+                          }}
+                          onDragEnd={() => {
+                            draggedPanelIdRef.current = null;
+                            setDraggedPanelId(null);
+                          }}
+                          style={activePanelWidths[panel.id] ? { width: `${activePanelWidths[panel.id]}px` } : undefined}
+                          className={cn(
+                            "group relative h-full min-h-0 w-[22rem] shrink-0 sm:w-[24rem] lg:w-[28rem] xl:w-[30rem]",
+                            panel.id === activeFocusedPanelId && "ring-2 ring-primary/25 ring-offset-2 ring-offset-background",
+                            draggedPanelId === panel.id && "opacity-70",
+                            resizingPanelId === panel.id && "ring-2 ring-primary/30 ring-offset-2 ring-offset-background"
+                          )}
+                        >
+                          {renderPanel(panel)}
+                          <button
+                            type="button"
+                            data-panel-resize-handle="true"
+                            className="absolute inset-y-0 right-0 z-10 hidden w-3 cursor-col-resize touch-none md:flex md:items-center md:justify-center"
+                            aria-label={`Resize ${PANEL_LABELS[panel.kind]} panel`}
+                            onClick={(event) => event.stopPropagation()}
+                            onPointerDown={(event) => startPanelResize(event, activeSession.id, panel.id)}
+                          >
+                            <span
+                              className={cn(
+                                "pointer-events-none h-16 w-px bg-border/70 transition-colors group-hover:bg-primary/50",
+                                resizingPanelId === panel.id && "bg-primary/70"
+                              )}
+                            />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>

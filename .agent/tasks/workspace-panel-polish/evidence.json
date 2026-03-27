@@ -1,0 +1,187 @@
+{
+  "task_id": "workspace-panel-polish",
+  "overall_status": "PASS",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "The left sidebar is reduced to the app title, the existing new-project-button, and the project/session navigation area; extra footer/status chrome outside that navigation area is removed.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The sidebar only renders the title/new-project header and the project/session nav region."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC2",
+      "text": "Project rows remain usable for expand/collapse and session creation, while session rows stay selectable via session-row with simplified status-focused summaries.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Project rows keep expand/collapse and new-session-button, and session rows are simplified to name plus status."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-panel-polish/raw/usage-recordings.txt",
+          "command": "npm run test:e2e -- e2e/usage-recordings.spec.ts",
+          "exit_code": 0,
+          "summary": "Playwright usage flows passed with the simplified project/session list."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC3",
+      "text": "The active session header keeps active-session-label, the Start/Stop/New Panel controls, one project chip, and the current session/agent status chips; runtime/workspace text, agent URL text, sandbox chip, and docker availability chip are removed.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The active session header renders only the simplified label/chip/control set with no retired metadata subtree."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-panel-polish/raw/ac3-header-verifier.txt",
+          "command": "npx playwright test e2e/.tmp-workspace-panel-polish-ac3.spec.ts --config=playwright.config.ts",
+          "exit_code": 0,
+          "summary": "Focused Playwright verification confirmed the removed header metadata selectors are absent."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC4",
+      "text": "With an active session open, the workspace layout fills available height without page-level vertical scrolling at normal desktop sizes; vertical scrolling is contained inside the sidebar or panel content areas, and horizontal scrolling is limited to the session panel rail.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/styles.css",
+          "summary": "App shell styles and workspace containers constrain layout height and keep outer overflow hidden."
+        },
+        {
+          "type": "verdict",
+          "path": ".agent/tasks/workspace-panel-polish/verdict.json",
+          "summary": "Fresh verification measured no page-level vertical overflow and confirmed the panel rail is the horizontal scroll container."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC5",
+      "text": "The Files panel header no longer repeats the workspace path, and opening a file from the tree opens or focuses the matching editor panel, then scrolls the rail so that editor into view directly without duplicates.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The Files panel header drops the redundant path, and openFile deduplicates editors and scrolls the target editor into view."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-panel-polish/raw/usage-recordings.txt",
+          "command": "npm run test:e2e -- e2e/usage-recordings.spec.ts",
+          "exit_code": 0,
+          "summary": "File-open and editor-focus flows passed, including one-editor-per-file behavior."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC6",
+      "text": "The Editor panel keeps the file title, relative file path, and existing save/close controls in the main header, removes the duplicate path/status strip, keeps editor scrolling inside the editor body, and preserves editor-active-path on the visible path element.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The visible editor path moved into the main header and keeps the editor-active-path selector."
+        },
+        {
+          "type": "file",
+          "path": "src/components/editor-panel.tsx",
+          "summary": "The editor body is the only scrollable editor content region, with no duplicate footer strip."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC7",
+      "text": "The Terminal panel fills the full panel body height, uses a solid theme-aware background, and still starts, resizes, accepts input, and stops against the current session through the existing terminal integration.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/components/terminal-panel.tsx",
+          "summary": "The terminal uses a solid theme-aware palette and preserves start/write/resize/stop integration."
+        },
+        {
+          "type": "verdict",
+          "path": ".agent/tasks/workspace-panel-polish/verdict.json",
+          "summary": "Fresh verification confirmed full-height mounting, solid background, typed input echo, and clean stop/restart behavior."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC8",
+      "text": "The Browser panel is simplified so navigation is driven from the top URL row, Enter submits navigation, the existing web-open-button appears only when the normalized draft URL differs from the loaded URL, redundant subtitle/help/status rows are removed, and the empty state or iframe fills the remaining body area.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Browser navigation is driven from the top URL row with conditional submit affordance and no extra status/help rows."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-panel-polish/raw/usage-recordings.txt",
+          "command": "npm run test:e2e -- e2e/usage-recordings.spec.ts",
+          "exit_code": 0,
+          "summary": "Browser navigation and iframe loading passed in the usage regression suite."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC9",
+      "text": "Open panels can be resized narrower or wider from the panel rail without breaking focus, drag-reorder, close, file-open, or browser/terminal flows during the current app session.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Per-session width state, resize handles, and drag/drop ordering are implemented in the panel rail."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/workspace-panel-polish/raw/test-integration.txt",
+          "command": "npm run test:e2e -- e2e/workspace-panel-polish.spec.ts",
+          "exit_code": 0,
+          "summary": "The dedicated Playwright regression passed for resize plus horizontal-scroll drag reorder."
+        }
+      ],
+      "gaps": []
+    }
+  ],
+  "changed_files": [
+    "src/App.tsx",
+    "src/components/terminal-panel.tsx",
+    "src/components/ui/panel-shell.tsx",
+    "e2e/usage-recordings.spec.ts",
+    "e2e/workspace-panel-polish.spec.ts"
+  ],
+  "commands_for_fresh_verifier": [
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:e2e -- e2e/usage-recordings.spec.ts",
+    "npm run test:e2e -- e2e/workspace-panel-polish.spec.ts"
+  ],
+  "known_gaps": []
+}

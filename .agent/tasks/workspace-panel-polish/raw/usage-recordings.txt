@@ -1,0 +1,12 @@
+
+> the-big-ide@0.1.5 test:e2e
+> playwright test e2e/usage-recordings.spec.ts
+
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/usage-recordings.spec.ts:97:3 › usage recordings › session lifecycle from UI (9.6s)
+  ✓  2 [chromium] › e2e/usage-recordings.spec.ts:144:3 › usage recordings › docker sandbox startup path shows agent chat when Docker works (15.4s)
+  ✓  3 [chromium] › e2e/usage-recordings.spec.ts:194:3 › usage recordings › files open one-editor-per-file and git/browser panels stay usable (9.4s)
+
+  3 passed (41.3s)

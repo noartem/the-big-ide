@@ -1,0 +1,4 @@
+
+> the-big-ide@0.1.5 typecheck
+> tsc --noEmit
+

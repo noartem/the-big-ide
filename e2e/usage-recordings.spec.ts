@@ -132,8 +132,9 @@ test.describe("usage recordings", () => {
     await page.getByTestId("start-session-button").click();
     await expect(sessionRow).toHaveAttribute("data-session-status", "running", { timeout: 60_000 });
 
-    await expect(page.getByTestId("session-runtime-context")).toBeVisible();
-    await expect(page.getByTestId("session-sandbox-mode")).toContainText("host", { timeout: 60_000 });
+    await expect(page.getByTestId("session-runtime-context")).toHaveCount(0);
+    await expect(page.getByTestId("session-sandbox-mode")).toHaveCount(0);
+    await expect(page.getByTestId("session-agent-url")).toHaveCount(0);
     await expect(page.getByTestId("agent-chat-surface")).toBeVisible();
 
     await page.getByTestId("stop-session-button").click();
@@ -158,9 +159,31 @@ test.describe("usage recordings", () => {
     await page.getByTestId("start-session-button").click();
     await expect(sessionRow).toHaveAttribute("data-session-status", "running", { timeout: 240_000 });
 
-    const sandboxModeText = (await page.getByTestId("session-sandbox-mode").textContent({ timeout: 240_000 })) ?? "";
-    if (sandboxModeText.includes("docker")) {
-      await expect(page.getByTestId("session-agent-url")).toContainText("http://127.0.0.1:", { timeout: 240_000 });
+    const runtimeInfo = await page.evaluate(
+      async ({ projectName: name, sessionName: session }) => {
+        const runtime = (window as unknown as { bigIDE?: any }).bigIDE;
+        if (!runtime) {
+          throw new Error("bigIDE API is not available");
+        }
+
+        const projects = await runtime.projects.list();
+        const project = projects.find((entry: { name: string; sessions: Array<{ name: string; sandboxRuntime: { mode: string } | null }> }) => entry.name === name);
+        const activeSession = project?.sessions.find((entry: { name: string }) => entry.name === session);
+        return {
+          sandboxMode: activeSession?.sandboxRuntime?.mode ?? null
+        };
+      },
+      {
+        projectName: dockerProjectName,
+        sessionName: dockerSessionName
+      }
+    );
+
+    expect(["docker", "host"]).toContain(runtimeInfo.sandboxMode);
+    await expect(page.getByTestId("session-runtime-context")).toHaveCount(0);
+    await expect(page.getByTestId("session-sandbox-mode")).toHaveCount(0);
+    await expect(page.getByTestId("session-agent-url")).toHaveCount(0);
+    if (runtimeInfo.sandboxMode === "docker") {
       await expect(page.getByTestId("agent-chat-iframe")).toBeVisible({ timeout: 240_000 });
     }
 

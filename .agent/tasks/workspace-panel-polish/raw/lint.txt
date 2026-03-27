@@ -1,0 +1,16 @@
+No standalone lint script is defined in package.json.
+Available scripts:
+- backend:web
+- build
+- build:app
+- dev
+- dev:web
+- dev:web:ui
+- preview
+- preview:web
+- release
+- start
+- test:e2e
+- test:e2e:headed
+- test:e2e:record
+- typecheck

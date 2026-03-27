@@ -10,6 +10,11 @@ interface TerminalPanelProps {
   session: Session | null;
 }
 
+function readThemeColor(variableName: string, fallback: string) {
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue(variableName).trim();
+  return value ? `hsl(${value})` : fallback;
+}
+
 export function TerminalPanel({ session }: TerminalPanelProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
 
@@ -23,11 +28,11 @@ export function TerminalPanel({ session }: TerminalPanelProps) {
       fontSize: 12,
       convertEol: true,
       cursorBlink: true,
-      allowTransparency: true,
+      allowTransparency: false,
       theme: {
-        background: "#f8f4ea",
-        foreground: "#18202a",
-        cursor: "#1d7485",
+        background: readThemeColor("--card", "#ffffff"),
+        foreground: readThemeColor("--foreground", "#18202a"),
+        cursor: readThemeColor("--primary", "#1d7485"),
         black: "#212833",
         red: "#b42318",
         green: "#18794e",
@@ -78,7 +83,9 @@ export function TerminalPanel({ session }: TerminalPanelProps) {
         return;
       }
 
-      terminal.write(`\r\n[terminal exited: code ${String(payload.code ?? 0)}]\r\n`);
+      terminal.write(`
+[terminal exited: code ${String(payload.code ?? 0)}]
+`);
     });
 
     const resizeObserver = new ResizeObserver(() => {
@@ -100,5 +107,5 @@ export function TerminalPanel({ session }: TerminalPanelProps) {
     return <div className="flex h-full items-center justify-center text-[11px] text-muted-foreground">Create and select a session.</div>;
   }
 
-  return <div ref={mountRef} className="h-full w-full overflow-hidden" />;
+  return <div ref={mountRef} className="h-full w-full overflow-hidden bg-card" />;
 }

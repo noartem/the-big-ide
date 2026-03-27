@@ -1,0 +1,49 @@
+
+Running 4 tests using 1 worker
+
+  ✘  1 [chromium] › e2e/tmp-workspace-panel-polish-evidence.spec.ts:66:3 › workspace panel polish evidence checks › desktop scroll and resize behavior (21.4s)
+  ✓  2 [chromium] › e2e/usage-recordings.spec.ts:97:3 › usage recordings › session lifecycle from UI (18.6s)
+  ✓  3 [chromium] › e2e/usage-recordings.spec.ts:143:3 › usage recordings › docker sandbox startup path shows agent chat when Docker works (1.1m)
+  ✓  4 [chromium] › e2e/usage-recordings.spec.ts:171:3 › usage recordings › files open one-editor-per-file and git/browser panels stay usable (2.3m)
+
+
+  1) [chromium] › e2e/tmp-workspace-panel-polish-evidence.spec.ts:66:3 › workspace panel polish evidence checks › desktop scroll and resize behavior 
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoBeGreaterThan[2m([22m[32mexpected[39m[2m)[22m
+
+    Expected: > [32m540[39m
+    Received:   [31m480[39m
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+       97 |     await page.mouse.up();
+       98 |
+    >  99 |     await expect.poll(async () => {
+          |     ^
+      100 |       const after = await filesPanel.boundingBox();
+      101 |       return after ? Math.round(after.width) : 0;
+      102 |     }).toBeGreaterThan(Math.round(before.width) + 60);
+        at /home/noartem/Projects/big/e2e/tmp-workspace-panel-polish-evidence.spec.ts:99:5
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/tmp-workspace-panel-polish-6e527--scroll-and-resize-behavior-chromium/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/tmp-workspace-panel-polish-6e527--scroll-and-resize-behavior-chromium/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/tmp-workspace-panel-polish-6e527--scroll-and-resize-behavior-chromium/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/tmp-workspace-panel-polish-6e527--scroll-and-resize-behavior-chromium/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/tmp-workspace-panel-polish-6e527--scroll-and-resize-behavior-chromium/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium] › e2e/tmp-workspace-panel-polish-evidence.spec.ts:66:3 › workspace panel polish evidence checks › desktop scroll and resize behavior 
+  3 passed (4.4m)
