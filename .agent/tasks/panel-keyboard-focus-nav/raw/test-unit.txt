@@ -1,0 +1,6 @@
+$ npm run typecheck
+
+> the-big-ide@0.1.5 typecheck
+> tsc --noEmit
+
+Note: `package.json:7-21` does not define a dedicated unit-test script. This evidence bundle captures the rerun typecheck output here as the nearest lightweight correctness check.

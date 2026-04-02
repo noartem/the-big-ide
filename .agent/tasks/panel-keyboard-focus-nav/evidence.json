@@ -1,0 +1,139 @@
+{
+  "task_id": "panel-keyboard-focus-nav",
+  "overall_status": "PASS",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "`Ctrl+Alt+ArrowLeft` and `Ctrl+Alt+ArrowRight` continue to move the active-panel selection across the open panels of the active session in visual order, and when the destination panel is one of the panels named in the task, keyboard focus is moved into that panel's primary content instead of remaining on the outer panel shell.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Panel cycling now schedules inner-content focus for browser, editor, terminal, and files panels after left/right shortcut navigation."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/panel-keyboard-focus-nav/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"panel keyboard focus routing, file tree keys, and Ctrl\\+Alt\\+V close work\"",
+          "exit_code": 0,
+          "summary": "Targeted Playwright coverage passed for keyboard panel routing."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC2",
+      "text": "Primary-content focus targets are explicit and immediately usable after panel cycling: Browser focuses the URL input, Editor focuses the Monaco editor surface, Terminal focuses the xterm terminal surface, and Files focuses the first keyboard-navigable item in the rendered file tree so the user can continue navigating without an extra click.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "Workspace focus helpers route focus to URL input, editor focus bridge, terminal focus bridge, and file-tree first-item focus."
+        },
+        {
+          "type": "file",
+          "path": "src/components/editor-panel.tsx",
+          "summary": "Editor panel exposes a focus hook that moves DOM focus into Monaco."
+        },
+        {
+          "type": "file",
+          "path": "src/components/terminal-panel.tsx",
+          "summary": "Terminal panel exposes a focus hook that moves DOM focus into the xterm surface."
+        },
+        {
+          "type": "file",
+          "path": "src/components/file-tree.tsx",
+          "summary": "File tree can focus its first visible keyboard item for immediate navigation."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC3",
+      "text": "While the Files panel has focus, keyboard-only tree navigation works with plain arrow keys and Enter: Up/Down move between visible tree items, Right opens a collapsed folder, Left closes an expanded folder, Enter on a folder toggles it, and Enter on a file opens or reuses that file's editor panel and moves focus into the editor content.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/components/file-tree.tsx",
+          "summary": "The tree now tracks a roving active item, handles arrow and Enter keys, toggles folders, and opens files from keyboard interaction."
+        },
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The Files panel now forwards the keyboard open request with `focusEditor`, so Enter-driven file opens move focus into the editor content."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/panel-keyboard-focus-nav/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"panel keyboard focus routing, file tree keys, and Ctrl\\+Alt\\+V close work\"",
+          "exit_code": 0,
+          "summary": "Focused browser test passed for file tree keyboard navigation and editor handoff."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC4",
+      "text": "A panel-close shortcut is available on the active session workspace and closes the currently focused panel without using the mouse; after closing, focus falls through using the existing panel-close selection behavior (next panel if available, otherwise previous, otherwise none).",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "file",
+          "path": "src/App.tsx",
+          "summary": "The close shortcut path now resolves only the actually focused workspace panel before closing, instead of falling back to selected or first panel ids."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/panel-keyboard-focus-nav/raw/test-integration.txt",
+          "command": "npm run test:e2e -- --grep \"panel keyboard focus routing, file tree keys, and Ctrl\\+Alt\\+V close work\"",
+          "exit_code": 0,
+          "summary": "Playwright coverage passed for Ctrl+Alt+V closing only from a focused workspace panel."
+        }
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC5",
+      "text": "Existing panel-management behavior is preserved unless directly required for the task: `Ctrl+Alt+T` still opens the new-panel dialog, panel cycling still works for the active session, existing panel/file-tree test selectors remain available, and the change does not require backend/runtime changes outside the current React UI path.",
+      "status": "PASS",
+      "proof": [
+        {
+          "type": "command",
+          "path": ".agent/tasks/panel-keyboard-focus-nav/raw/typecheck.txt",
+          "command": "npm run typecheck",
+          "exit_code": 0,
+          "summary": "TypeScript checks passed after the workspace keyboard changes."
+        },
+        {
+          "type": "command",
+          "path": ".agent/tasks/panel-keyboard-focus-nav/raw/build.txt",
+          "command": "npm run build",
+          "exit_code": 0,
+          "summary": "Production build passed without requiring backend/runtime changes."
+        },
+        {
+          "type": "file",
+          "path": "e2e/usage-recordings.spec.ts",
+          "summary": "Existing keyboard shortcut coverage was extended without removing existing selectors."
+        }
+      ],
+      "gaps": []
+    }
+  ],
+  "changed_files": [
+    "src/App.tsx",
+    "src/components/file-tree.tsx",
+    "src/components/editor-panel.tsx",
+    "src/components/terminal-panel.tsx",
+    "e2e/usage-recordings.spec.ts"
+  ],
+  "commands_for_fresh_verifier": [
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:e2e -- --grep \"panel keyboard focus routing, file tree keys, and Ctrl\\+Alt\\+V close work\""
+  ],
+  "known_gaps": []
+}

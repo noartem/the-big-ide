@@ -1,0 +1,7 @@
+No lint command was rerun for this evidence bundle.
+
+Reason:
+- `package.json:7-21` defines `build`, `typecheck`, and `test:e2e`, but does not define a dedicated lint script.
+
+Fresh verifier note:
+- Re-run the listed verifier commands from `evidence.json`; there is no repo-standard `npm run lint` target to execute.

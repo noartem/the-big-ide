@@ -1,0 +1,55 @@
+{
+  "task_id": "panel-keyboard-focus-nav",
+  "verified_at": "2026-03-28",
+  "overall_verdict": "PASS",
+  "criteria": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "reason": "Current App.tsx still cycles panels in visual order with Ctrl+Alt+ArrowLeft/ArrowRight and requests inner-content focus for browser, editor, files, and terminal panels."
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "reason": "Current focus routing targets the browser URL input, Monaco editor focus bridge, xterm focus bridge, and the first visible file-tree item, with targeted Playwright coverage passing."
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "reason": "Current file-tree keyboard handlers implement ArrowUp/Down/Left/Right and Enter behavior, and Enter-driven file opens request editor focus while the targeted Playwright scenario passes."
+    },
+    {
+      "id": "AC4",
+      "status": "PASS",
+      "reason": "Current key handling binds Ctrl+Alt+V to close only the actually focused workspace panel and the close path still falls through to next, previous, or none as specified."
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "reason": "Ctrl+Alt+T still opens the panel dialog, required selectors remain present, and current typecheck/build/targeted Playwright verification all pass without needing task-specific backend behavior."
+    }
+  ],
+  "commands_run": [
+    {
+      "command": "npm run typecheck",
+      "status": "PASS"
+    },
+    {
+      "command": "npm run build",
+      "status": "PASS"
+    },
+    {
+      "command": "npm run test:e2e -- --grep \"panel keyboard focus routing, file tree keys, and Ctrl\\+Alt\\+V close work\"",
+      "status": "PASS",
+      "details": "1 passed"
+    }
+  ],
+  "artifacts_used": [
+    ".agent/tasks/panel-keyboard-focus-nav/spec.md",
+    ".agent/tasks/panel-keyboard-focus-nav/evidence.md",
+    ".agent/tasks/panel-keyboard-focus-nav/evidence.json",
+    ".agent/tasks/panel-keyboard-focus-nav/raw/build.txt",
+    ".agent/tasks/panel-keyboard-focus-nav/raw/test-integration.txt",
+    ".agent/tasks/panel-keyboard-focus-nav/raw/typecheck.txt"
+  ]
+}

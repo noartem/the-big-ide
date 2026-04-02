@@ -1,0 +1,10 @@
+
+> the-big-ide@0.1.5 test:e2e
+> playwright test --grep panel keyboard focus routing, file tree keys, and Ctrl\+Alt\+V close work
+
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › e2e/usage-recordings.spec.ts:269:3 › usage recordings › panel keyboard focus routing, file tree keys, and Ctrl+Alt+V close work (6.8s)
+
+  1 passed (11.0s)

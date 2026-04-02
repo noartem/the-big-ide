@@ -15,6 +15,7 @@ interface EditorPanelProps {
   value: string;
   onChange: (value: string) => void;
   onSave?: () => void;
+  registerFocusTarget?: (focusTarget: (() => void) | null) => void;
 }
 
 const MONACO_THEME_NAME = "bigide-theme";
@@ -207,12 +208,13 @@ function resolveMonacoLanguage(filePath: string | null) {
   return "plaintext";
 }
 
-export function EditorPanel({ filePath, value, onChange, onSave }: EditorPanelProps) {
+export function EditorPanel({ filePath, value, onChange, onSave, registerFocusTarget }: EditorPanelProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const modelRef = useRef<monaco.editor.ITextModel | null>(null);
   const modelChangeRef = useRef<monaco.IDisposable | null>(null);
   const syncingRef = useRef(false);
+  const pendingFocusRef = useRef(false);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
 
@@ -225,6 +227,30 @@ export function EditorPanel({ filePath, value, onChange, onSave }: EditorPanelPr
   useEffect(() => {
     onSaveRef.current = onSave;
   }, [onSave]);
+
+  useEffect(() => {
+    registerFocusTarget?.(() => {
+      pendingFocusRef.current = true;
+
+      const tryFocus = (remainingAttempts: number) => {
+        if (editorRef.current && modelRef.current) {
+          pendingFocusRef.current = false;
+          editorRef.current.focus();
+          return;
+        }
+
+        if (remainingAttempts > 0) {
+          window.requestAnimationFrame(() => tryFocus(remainingAttempts - 1));
+        }
+      };
+
+      window.requestAnimationFrame(() => tryFocus(60));
+    });
+
+    return () => {
+      registerFocusTarget?.(null);
+    };
+  }, [registerFocusTarget]);
 
   useEffect(() => {
     if (!filePath || !containerRef.current) {
@@ -296,6 +322,17 @@ export function EditorPanel({ filePath, value, onChange, onSave }: EditorPanelPr
 
     editorRef.current.setModel(model);
     modelRef.current = model;
+
+    if (pendingFocusRef.current) {
+      window.requestAnimationFrame(() => {
+        if (!pendingFocusRef.current || editorRef.current?.getModel() !== model) {
+          return;
+        }
+
+        pendingFocusRef.current = false;
+        editorRef.current.focus();
+      });
+    }
 
     return () => {
       modelChangeRef.current?.dispose();

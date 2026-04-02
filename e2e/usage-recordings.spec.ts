@@ -28,7 +28,7 @@ async function createSessionViaUi(page: Page, projectName: string, sessionName: 
   await expect(page.getByTestId("session-name-input")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("session-name-input").fill(sessionName);
   await page.getByTestId("create-session-button").click();
-  await expect(page.getByTestId("active-session-label")).toContainText(`Session: ${sessionName}`, { timeout: 20_000 });
+  await expect(page.getByTestId("active-session-label")).toHaveValue(sessionName, { timeout: 20_000 });
 }
 
 async function openPanelViaUi(page: Page, kind: "agent" | "files" | "terminal" | "git" | "browser") {
@@ -191,6 +191,190 @@ test.describe("usage recordings", () => {
     await expect(sessionRow).toHaveAttribute("data-session-status", "idle", { timeout: 120_000 });
   });
 
+  test("session rename and Ctrl+Alt+T panel shortcut work", async ({ page }) => {
+    const projectName = uniqueName("rename-project");
+    const sessionName = uniqueName("rename-session");
+    const renamedSessionName = uniqueName("renamed-session");
+
+    await openWorkspace(page);
+    await createProjectViaUi(page, projectName);
+    await createSessionViaUi(page, projectName, sessionName);
+
+    const activeSessionLabel = page.getByTestId("active-session-label");
+    const sessionRow = page.locator(`[data-testid="session-row"][data-session-name="${sessionName}"]`);
+    await expect(sessionRow).toBeVisible();
+
+    const beforeRename = await page.evaluate(async ({ projectName: name, sessionName: session }) => {
+      const runtime = (window as unknown as { bigIDE?: any }).bigIDE;
+      if (!runtime) {
+        throw new Error("bigIDE API is not available");
+      }
+
+      const projects = await runtime.projects.list();
+      const project = projects.find((entry: { name: string; sessions: Array<{ name: string; id: string; workdir: string }> }) => entry.name === name);
+      const activeSession = project?.sessions.find((entry: { name: string }) => entry.name === session);
+      return {
+        id: activeSession?.id ?? null,
+        workdir: activeSession?.workdir ?? null
+      };
+    }, {
+      projectName,
+      sessionName
+    });
+
+    await activeSessionLabel.fill(renamedSessionName);
+    await activeSessionLabel.press("Enter");
+    await expect(activeSessionLabel).toHaveValue(renamedSessionName);
+    await expect(page.locator(`[data-testid="session-row"][data-session-name="${renamedSessionName}"]`)).toBeVisible();
+
+    const afterRename = await page.evaluate(async ({ projectName: name, sessionName: session }) => {
+      const runtime = (window as unknown as { bigIDE?: any }).bigIDE;
+      if (!runtime) {
+        throw new Error("bigIDE API is not available");
+      }
+
+      const projects = await runtime.projects.list();
+      const project = projects.find((entry: { name: string; sessions: Array<{ name: string; id: string; workdir: string }> }) => entry.name === name);
+      const activeSession = project?.sessions.find((entry: { name: string }) => entry.name === session);
+      return {
+        id: activeSession?.id ?? null,
+        workdir: activeSession?.workdir ?? null
+      };
+    }, {
+      projectName,
+      sessionName: renamedSessionName
+    });
+
+    expect(afterRename.id).toBe(beforeRename.id);
+    expect(afterRename.workdir).toBe(beforeRename.workdir);
+
+    await activeSessionLabel.fill("   ");
+    await activeSessionLabel.press("Enter");
+    await expect(activeSessionLabel).toHaveValue(renamedSessionName);
+
+    await page.keyboard.press("Control+Alt+T");
+    const firstPanelOption = page.getByTestId("new-panel-option-agent");
+    await expect(firstPanelOption).toBeFocused();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByTestId("new-panel-option-files")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("[data-testid='session-panel'][data-panel-id='files']")).toHaveCount(1);
+
+    await page.keyboard.press("Control+Alt+T");
+    await expect(firstPanelOption).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(firstPanelOption).toHaveCount(0);
+  });
+
+  test("panel keyboard focus routing, file tree keys, and Ctrl+Alt+V close work", async ({ page }) => {
+    const projectName = uniqueName("keyboard-project");
+    const sessionName = uniqueName("keyboard-session");
+    const fixtureRepo = createGitFixtureRepo();
+
+    try {
+      await openWorkspace(page);
+
+      const sessionWorkdir = await page.evaluate(
+        async ({ projectName: name, sessionName: session, rootPath }) => {
+          const runtime = (window as unknown as { bigIDE?: any }).bigIDE;
+          if (!runtime) {
+            throw new Error("bigIDE API is not available");
+          }
+
+          const project = await runtime.projects.create({
+            name,
+            rootPath
+          });
+
+          const createdSession = await runtime.sessions.create({
+            projectId: project.id,
+            name: session
+          });
+
+          return createdSession.workdir;
+        },
+        {
+          projectName,
+          sessionName,
+          rootPath: fixtureRepo
+        }
+      );
+
+      await setProjectSandboxMode(page, projectName, "host");
+      await page.getByRole("button", { name: projectName, exact: true }).click();
+      await page.locator(`[data-testid="session-row"][data-session-name="${sessionName}"]`).click();
+
+      await openPanelViaUi(page, "files");
+      await openPanelViaUi(page, "browser");
+      await openPanelViaUi(page, "terminal");
+
+      const activePanelKind = () =>
+        page.evaluate(() => {
+          const activeElement = document.activeElement;
+          if (!(activeElement instanceof HTMLElement)) {
+            return null;
+          }
+
+          return activeElement.closest<HTMLElement>("[data-panel-id]")?.dataset.panelId ?? null;
+        });
+
+      await page.locator("[data-testid='session-panel'][data-panel-id='agent']").first().click();
+      await page.keyboard.press("Control+Alt+ArrowRight");
+
+      await expect.poll(activePanelKind).toBe("files");
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const activeElement = document.activeElement;
+            return activeElement instanceof HTMLElement ? activeElement.dataset.fileTreeItem === "true" : false;
+          })
+        )
+        .toBe(true);
+
+      const srcDirPath = `${sessionWorkdir}/src`;
+      const nestedDirPath = `${sessionWorkdir}/src/nested`;
+      const readmePath = `${sessionWorkdir}/README.md`;
+
+      await page.locator(`[data-testid="file-tree-directory"][data-file-path="${srcDirPath}"]`).focus();
+      await page.keyboard.press("ArrowRight");
+      await expect(page.locator(`[data-testid="file-tree-directory"][data-file-path="${nestedDirPath}"]`)).toBeVisible({ timeout: 20_000 });
+      await page.keyboard.press("ArrowLeft");
+      await expect(page.locator(`[data-testid="file-tree-directory"][data-file-path="${nestedDirPath}"]`)).toHaveCount(0);
+
+      await page.locator(`[data-testid="file-tree-file"][data-file-path="${readmePath}"]`).focus();
+      await page.keyboard.press("Enter");
+
+      await expect(page.locator("[data-testid='session-panel'][data-panel-id='editor']")).toHaveCount(1);
+      await expect(page.getByTestId("editor-active-path")).toContainText("README.md");
+      await expect.poll(activePanelKind).toBe("editor");
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const activeElement = document.activeElement;
+            return activeElement instanceof HTMLElement ? activeElement.closest(".monaco-editor") !== null : false;
+          })
+        )
+        .toBe(true);
+
+      await page.keyboard.press("Control+Alt+ArrowLeft");
+      await expect.poll(activePanelKind).toBe("terminal");
+
+      await page.keyboard.press("Control+Alt+ArrowLeft");
+      await expect(page.getByTestId("web-url-input").first()).toBeFocused();
+
+      await page.getByTestId("active-session-label").focus();
+      await page.keyboard.press("Control+Alt+V");
+      await expect(page.locator("[data-testid='session-panel'][data-panel-id='browser']")).toHaveCount(1);
+
+      await page.getByTestId("web-url-input").first().focus();
+      await page.keyboard.press("Control+Alt+V");
+      await expect(page.locator("[data-testid='session-panel'][data-panel-id='browser']")).toHaveCount(0);
+      await expect.poll(activePanelKind).toBe("terminal");
+    } finally {
+      rmSync(fixtureRepo, { recursive: true, force: true });
+    }
+  });
+
   test("files open one-editor-per-file and git/browser panels stay usable", async ({ page }) => {
     const projectName = uniqueName("git-project");
     const sessionName = uniqueName("git-session");
@@ -231,7 +415,7 @@ test.describe("usage recordings", () => {
       await page.getByRole("button", { name: projectName, exact: true }).click();
       const sessionRow = page.locator(`[data-testid="session-row"][data-session-name="${sessionName}"]`);
       await sessionRow.click();
-      await expect(page.getByTestId("active-session-label")).toContainText(`Session: ${sessionName}`);
+      await expect(page.getByTestId("active-session-label")).toHaveValue(sessionName);
       await expect(page.locator("[data-testid='session-panel']")).toHaveCount(1);
 
       await openPanelViaUi(page, "files");
@@ -253,6 +437,7 @@ test.describe("usage recordings", () => {
       await expect(editorPanels).toHaveCount(1);
       await expect(page.locator("[data-testid='editor-tabs']")).toHaveCount(0);
       await expect(page.getByTestId("editor-active-path")).toContainText("README.md");
+      await expect(editorPanels.first()).toContainText("Playwright fixture");
 
       await readmeRow.click();
       await expect(editorPanels).toHaveCount(1);

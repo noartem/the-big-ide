@@ -8,6 +8,7 @@ import "xterm/css/xterm.css";
 
 interface TerminalPanelProps {
   session: Session | null;
+  registerFocusTarget?: (focusTarget: (() => void) | null) => void;
 }
 
 function readThemeColor(variableName: string, fallback: string) {
@@ -15,8 +16,30 @@ function readThemeColor(variableName: string, fallback: string) {
   return value ? `hsl(${value})` : fallback;
 }
 
-export function TerminalPanel({ session }: TerminalPanelProps) {
+export function TerminalPanel({ session, registerFocusTarget }: TerminalPanelProps) {
   const mountRef = useRef<HTMLDivElement | null>(null);
+  const terminalRef = useRef<Terminal | null>(null);
+
+  useEffect(() => {
+    registerFocusTarget?.(() => {
+      const tryFocus = (remainingAttempts: number) => {
+        if (terminalRef.current) {
+          terminalRef.current.focus();
+          return;
+        }
+
+        if (remainingAttempts > 0) {
+          window.requestAnimationFrame(() => tryFocus(remainingAttempts - 1));
+        }
+      };
+
+      window.requestAnimationFrame(() => tryFocus(60));
+    });
+
+    return () => {
+      registerFocusTarget?.(null);
+    };
+  }, [registerFocusTarget]);
 
   useEffect(() => {
     if (!mountRef.current || !window.bigIDE || !session) {
@@ -54,6 +77,7 @@ export function TerminalPanel({ session }: TerminalPanelProps) {
 
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    terminalRef.current = terminal;
     terminal.open(mountRef.current);
     fitAddon.fit();
     terminal.focus();
@@ -99,6 +123,7 @@ export function TerminalPanel({ session }: TerminalPanelProps) {
       stopTerminalData();
       stopTerminalExit();
       void window.bigIDE?.terminal.stop({ sessionId: session.id });
+      terminalRef.current = null;
       terminal.dispose();
     };
   }, [session]);
