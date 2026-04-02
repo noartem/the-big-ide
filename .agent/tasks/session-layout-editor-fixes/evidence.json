@@ -1,0 +1,135 @@
+{
+  "task_id": "session-layout-editor-fixes",
+  "overall_status": "PASS",
+  "updated_at": "2026-03-27T21:44:33+05:00",
+  "repo_revision": "30dfa2db45935de273874be5be8ec71e76bead4a",
+  "acceptance_criteria": [
+    {
+      "id": "AC1",
+      "text": "The active session header no longer renders the `Session:` prefix. `data-testid=\"active-session-label\"` remains present and displays only the current session name.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1860-1882 renders the active-session control without a `Session:` prefix.",
+        "e2e/usage-recordings.spec.ts:26-32 and e2e/workspace-panel-polish.spec.ts:21-27 assert the bare session-name value.",
+        "raw/test-integration.txt records the passing Playwright run."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC2",
+      "text": "The active session name is editable inline in the session header via an input styled to read like plain text by default. Editing a non-empty trimmed name and confirming it updates the active header label, the session entry in the sidebar, and persisted session state in both Electron and web mode without changing the session id or workdir path. Blank-only renames are rejected by keeping the previous name.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:574-599 trims input, rejects blank-only renames, calls `window.bigIDE.sessions.rename`, and syncs the updated session.",
+        "src/lib/web-big-ide-api.ts:152-172 + server/web-backend.js:1259-1270 persist rename in web mode.",
+        "electron/preload.mjs:26-45 + electron/main.js:1267-1278 persist rename in Electron mode.",
+        "e2e/usage-recordings.spec.ts:207-253 confirms row update, persisted state, unchanged `id`/`workdir`, and blank-only rejection."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC3",
+      "text": "The session metadata chips shown next to the active session name remain on a single visual row, truncate with ellipsis instead of wrapping when space is limited, and expose the full chip text through a hover title.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1884-1905 uses one nowrap flex row for the chips.",
+        "The same block assigns chip `title` attributes and truncated text containers with capped widths."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC4",
+      "text": "The session action buttons for Start, Stop, and `[+ New Panel]` remain on exactly one row without wrapping. If horizontal space is insufficient, the row may scroll horizontally, but the buttons must not break onto multiple lines.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1909-1944 uses `overflow-x-auto whitespace-nowrap` for the action row.",
+        "The same block assigns `shrink-0` to each action button."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC5",
+      "text": "The Start and Stop buttons use the same visual treatment as `[+ New Panel]` for variant, sizing, border shape, and typography, while preserving their existing icons, labels, disabled behavior, and `data-testid` hooks.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1910-1944 applies the same `size=sm`, `variant=outline`, `rounded-none`, and `px-3` styling to all three buttons.",
+        "Icons, labels, disabled props, and existing test ids remain present in the same block."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC6",
+      "text": "Pressing `Ctrl+Alt+T` opens the add-panel dialog for the active session. When the dialog opens, keyboard focus lands on the first panel option. Users can move focus through panel options with arrow keys and Tab/Shift+Tab, press Enter/Space on the focused option to create that panel, and press Escape to close the dialog without adding a panel.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1205-1208 binds `Ctrl+Alt+T` to open the dialog.",
+        "src/App.tsx:2121-2126 focuses the first option on open.",
+        "src/App.tsx:817-850 handles arrow/Home/End navigation.",
+        "src/App.tsx:2133-2144 renders native buttons in DOM order, preserving built-in Tab/Shift+Tab and Enter/Space semantics; Escape is handled by the Radix dialog wrapper.",
+        "e2e/usage-recordings.spec.ts:255-266 verifies focus, arrow navigation, Enter add, and Escape close."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC7",
+      "text": "Existing panel-add UI remains usable: `data-testid=\"new-panel-button\"` and `data-testid=\"new-panel-option-<kind>\"` stay available, and clicking an option still adds the corresponding panel to the active session.",
+      "status": "PASS",
+      "proof": [
+        "src/App.tsx:1934-1944 preserves `new-panel-button`.",
+        "src/App.tsx:2133-2144 preserves `new-panel-option-<kind>` and its click handler.",
+        "e2e/usage-recordings.spec.ts:34-36, 255-261, and 387-395 continue to use the panel-add flow successfully."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC8",
+      "text": "Opening a file from the Files panel shows the editor content in the Editor panel instead of a blank/invisible editor surface. Existing file contents are visible, edits remain possible, and save behavior continues to work.",
+      "status": "PASS",
+      "proof": [
+        "src/components/ui/panel-shell.tsx:21-41 keeps panel content in a `flex min-h-0 flex-1 flex-col overflow-hidden` container.",
+        "src/App.tsx:1356-1360 gives the editor wrapper full height with `flex h-full min-h-0 flex-1 flex-col overflow-hidden`.",
+        "src/components/editor-panel.tsx:236-334 still creates Monaco, binds the model, propagates edits, and wires save callbacks.",
+        "e2e/usage-recordings.spec.ts:322-331 asserts visible README content (`Playwright fixture`)."
+      ],
+      "gaps": []
+    },
+    {
+      "id": "AC9",
+      "text": "The Browser panel moves its URL/address row into the panel header area in place of the separate title treatment, so the panel does not show a redundant `Browser` title above the address input. Existing browser navigation behavior, open button behavior, iframe rendering, and `web-*` test ids remain functional.",
+      "status": "PASS",
+      "proof": [
+        "src/components/ui/panel-shell.tsx:22-30 suppresses the title block when `headerContent` is present.",
+        "src/App.tsx:1521-1549 moves the browser address form into the panel header.",
+        "src/App.tsx:1527-1547 and 1558-1569 preserve `web-*` behavior and test ids.",
+        "e2e/usage-recordings.spec.ts:387-395 verifies browser navigation and iframe load."
+      ],
+      "gaps": []
+    }
+  ],
+  "changed_files": [
+    "src/App.tsx",
+    "src/components/ui/panel-shell.tsx",
+    "src/types/big-ide.ts",
+    "src/lib/web-big-ide-api.ts",
+    "electron/preload.mjs",
+    "electron/main.js",
+    "server/web-backend.js",
+    "e2e/usage-recordings.spec.ts",
+    "e2e/workspace-panel-polish.spec.ts"
+  ],
+  "raw_artifacts": [
+    ".agent/tasks/session-layout-editor-fixes/raw/test-unit.txt",
+    ".agent/tasks/session-layout-editor-fixes/raw/build.txt",
+    ".agent/tasks/session-layout-editor-fixes/raw/test-integration.txt",
+    ".agent/tasks/session-layout-editor-fixes/raw/lint.txt"
+  ],
+  "commands_for_fresh_verifier": [
+    "npm run typecheck",
+    "npm run build",
+    "npm run test:e2e -- --grep \"session rename and Ctrl\\+Alt\\+T panel shortcut work|files open one-editor-per-file and git/browser panels stay usable|panel drag reorder still works after resize and horizontal scroll\""
+  ],
+  "known_gaps": [
+    "No dedicated lint npm script exists in package.json:7-21.",
+    "No dedicated unit-test npm script exists in package.json:7-21."
+  ]
+}

@@ -1,0 +1,7 @@
+No lint command was executed.
+
+Reason:
+- `package.json:7-21` lists the available npm scripts and does not include `lint`.
+
+Verifier note:
+- This repository-level gap did not block any acceptance criterion.

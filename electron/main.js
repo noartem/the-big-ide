@@ -1264,6 +1264,20 @@ function registerIpc() {
     return deepClone(session);
   });
 
+  ipcMain.handle("sessions:rename", async (_, payload) => {
+    const project = resolveProject(payload.projectId);
+    const session = resolveSession(project, payload.sessionId);
+    const nextName = (payload.name || "").trim();
+
+    if (!nextName) {
+      throw new Error("Session name is required");
+    }
+
+    session.name = nextName;
+    await saveState();
+    return deepClone(session);
+  });
+
   ipcMain.handle("sessions:start", async (_, payload) => {
     const project = resolveProject(payload.projectId);
     const session = resolveSession(project, payload.sessionId);

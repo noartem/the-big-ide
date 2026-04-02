@@ -116,6 +116,7 @@ export interface BigIDEApi {
   };
   sessions: {
     create: (payload: { projectId: string; name?: string }) => Promise<Session>;
+    rename: (payload: { projectId: string; sessionId: string; name: string }) => Promise<Session>;
     start: (payload: { projectId: string; sessionId: string }) => Promise<Session>;
     stop: (payload: { projectId: string; sessionId: string }) => Promise<Session>;
   };

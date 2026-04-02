@@ -155,6 +155,11 @@ export function createWebBigIDEApi(): BigIDEApi {
         notifyProjectsChanged();
         return session;
       },
+      rename: async (payload) => {
+        const session = await invoke<Session>(backendUrl, "sessions:rename", payload);
+        notifyProjectsChanged();
+        return session;
+      },
       start: async (payload) => {
         const session = await invoke<Session>(backendUrl, "sessions:start", payload);
         notifyProjectsChanged();

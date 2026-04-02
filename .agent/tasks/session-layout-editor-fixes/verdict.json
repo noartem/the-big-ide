@@ -1,0 +1,83 @@
+{
+  "task_id": "session-layout-editor-fixes",
+  "overall_verdict": "PASS",
+  "verified_at": "2026-03-27",
+  "repo_revision": "30dfa2db45935de273874be5be8ec71e76bead4a",
+  "criteria": [
+    {
+      "id": "AC1",
+      "status": "PASS",
+      "reason": "`src/App.tsx` keeps `data-testid=\"active-session-label\"` as the inline session-name input with no `Session:` prefix, and the targeted Playwright run passed."
+    },
+    {
+      "id": "AC2",
+      "status": "PASS",
+      "reason": "Inline rename trims input, rejects blank-only names, updates local state, and persists through `window.bigIDE.sessions.rename` in both the web and Electron backends without touching session ids or workdir paths; the rename Playwright flow passed."
+    },
+    {
+      "id": "AC3",
+      "status": "PASS",
+      "reason": "The header chips render in a single nowrap flex row with overflow clipping, per-chip `title` attributes, and truncated inner spans."
+    },
+    {
+      "id": "AC4",
+      "status": "PASS",
+      "reason": "Start, Stop, and New Panel render in one `overflow-x-auto whitespace-nowrap` action row and each button is `shrink-0`, preventing wrap."
+    },
+    {
+      "id": "AC5",
+      "status": "PASS",
+      "reason": "Start, Stop, and New Panel all use the same outline/small/rounded-none button treatment while keeping their existing icons, labels, disabled behavior, and test ids."
+    },
+    {
+      "id": "AC6",
+      "status": "PASS",
+      "reason": "`Ctrl+Alt+T` opens the add-panel dialog, focus is forced to the first option on open, arrow-key navigation is implemented, native button semantics cover Tab and Enter/Space, and the targeted Playwright shortcut flow passed."
+    },
+    {
+      "id": "AC7",
+      "status": "PASS",
+      "reason": "`new-panel-button` and `new-panel-option-<kind>` remain in place and the click-to-add flow still passes in Playwright."
+    },
+    {
+      "id": "AC8",
+      "status": "PASS",
+      "reason": "The editor panel and shell now preserve full-height flex sizing, Monaco still binds file models and save callbacks, and the file-open/editor-visibility Playwright flow passed."
+    },
+    {
+      "id": "AC9",
+      "status": "PASS",
+      "reason": "The browser address row is rendered through `PanelShell.headerContent`, which suppresses the redundant title block, and the browser navigation/iframe Playwright flow passed."
+    }
+  ],
+  "commands_run": [
+    {
+      "command": "git rev-parse HEAD",
+      "result": "PASS",
+      "details": "30dfa2db45935de273874be5be8ec71e76bead4a"
+    },
+    {
+      "command": "git status --short",
+      "result": "PASS",
+      "details": "Verified current workspace contents before rerun."
+    },
+    {
+      "command": "npm run typecheck",
+      "result": "PASS"
+    },
+    {
+      "command": "npm run build",
+      "result": "PASS"
+    },
+    {
+      "command": "npm run test:e2e -- --grep \"session rename and Ctrl\\+Alt\\+T panel shortcut work|files open one-editor-per-file and git/browser panels stay usable|panel drag reorder still works after resize and horizontal scroll\"",
+      "result": "PASS",
+      "details": "3 passed"
+    }
+  ],
+  "artifacts_used": [
+    ".agent/tasks/session-layout-editor-fixes/spec.md",
+    ".agent/tasks/session-layout-editor-fixes/evidence.md",
+    ".agent/tasks/session-layout-editor-fixes/evidence.json"
+  ]
+}

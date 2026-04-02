@@ -23,7 +23,7 @@ async function createSessionViaUi(page: Page, projectName: string, sessionName: 
   await expect(page.getByTestId("session-name-input")).toBeVisible({ timeout: 20_000 });
   await page.getByTestId("session-name-input").fill(sessionName);
   await page.getByTestId("create-session-button").click();
-  await expect(page.getByTestId("active-session-label")).toContainText(`Session: ${sessionName}`, { timeout: 20_000 });
+  await expect(page.getByTestId("active-session-label")).toHaveValue(sessionName, { timeout: 20_000 });
 }
 
 async function openPanelViaUi(page: Page, kind: "files" | "terminal" | "browser") {

@@ -1,0 +1,11 @@
+$ npm run typecheck
+
+> the-big-ide@0.1.5 typecheck
+> tsc --noEmit
+
+# Result
+- Exit status: 0
+- No TypeScript errors were reported.
+
+# Note
+- This repository has no dedicated unit-test npm script in `package.json:7-21`; typecheck is the closest non-integration verification artifact available.

@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld("bigIDE", {
       notifyProjectsChanged();
       return session;
     },
+    rename: async (payload) => {
+      const session = await ipcRenderer.invoke("sessions:rename", payload);
+      notifyProjectsChanged();
+      return session;
+    },
     start: async (payload) => {
       const session = await ipcRenderer.invoke("sessions:start", payload);
       notifyProjectsChanged();

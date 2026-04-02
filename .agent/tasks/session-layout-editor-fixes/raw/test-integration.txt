@@ -1,0 +1,12 @@
+$ npm run test:e2e -- --grep "session rename and Ctrl\+Alt\+T panel shortcut work|files open one-editor-per-file and git/browser panels stay usable|panel drag reorder still works after resize and horizontal scroll"
+
+> the-big-ide@0.1.5 test:e2e
+> playwright test --grep session rename and Ctrl\+Alt\+T panel shortcut work|files open one-editor-per-file and git/browser panels stay usable|panel drag reorder still works after resize and horizontal scroll
+
+Running 3 tests using 1 worker
+
+  ✓  1 [chromium] › e2e/usage-recordings.spec.ts:194:3 › usage recordings › session rename and Ctrl+Alt+T panel shortcut work (10.6s)
+  ✓  2 [chromium] › e2e/usage-recordings.spec.ts:269:3 › usage recordings › files open one-editor-per-file and git/browser panels stay usable (16.4s)
+  ✓  3 [chromium] › e2e/workspace-panel-polish.spec.ts:62:1 › panel drag reorder still works after resize and horizontal scroll (16.8s)
+
+  3 passed (52.5s)

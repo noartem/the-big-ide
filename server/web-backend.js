@@ -1256,6 +1256,20 @@ async function invokeMethod(method, payload) {
     return deepClone(session);
   }
 
+  if (method === "sessions:rename") {
+    const project = resolveProject(payload.projectId);
+    const session = resolveSession(project, payload.sessionId);
+    const nextName = (payload.name || "").trim();
+
+    if (!nextName) {
+      throw new Error("Session name is required");
+    }
+
+    session.name = nextName;
+    await saveState();
+    return deepClone(session);
+  }
+
   if (method === "sessions:start") {
     const project = resolveProject(payload.projectId);
     const session = resolveSession(project, payload.sessionId);
